@@ -1,0 +1,152 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  # Create a single draft release first; the build jobs upload assets to it.
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create draft release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Create the draft release if it does not already exist for this tag.
+          if ! gh release view "${{ github.ref_name }}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release create "${{ github.ref_name }}" \
+              --repo "${{ github.repository }}" \
+              --title "KidBuddy ${{ github.ref_name }}" \
+              --draft \
+              --notes "## 下载安装包
+
+          | 平台 | 文件 | 说明 |
+          |------|------|------|
+          | 🍎 macOS (Apple Silicon) | \`KidBuddy_macOS-Apple-Silicon.dmg\` | M1/M2/M3/M4 芯片 Mac |
+          | 🍎 macOS (Intel) | \`KidBuddy_macOS-Intel.dmg\` | 2020 年前的 Intel 芯片 Mac |
+          | 🪟 Windows | \`KidBuddy_Windows_x64.exe\` | Windows 10/11 64位 |
+          | 🐧 Linux | \`KidBuddy_Linux_amd64.deb\` | Ubuntu / Debian |
+
+          ## macOS 安装提示
+          如果提示\"已损坏，无法打开\"，请在终端执行：
+          \`\`\`bash
+          xattr -cr /Applications/KidBuddy.app
+          \`\`\`
+
+          ## Windows 安装提示
+          如果 SmartScreen 弹出警告，点击\"更多信息\" → \"仍要运行\"即可。"
+          fi
+
+  build:
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: --target aarch64-apple-darwin
+            rust_targets: aarch64-apple-darwin
+            asset_name: KidBuddy_macOS-Apple-Silicon.dmg
+            find_pattern: '*.dmg'
+          - platform: macos-latest
+            args: --target x86_64-apple-darwin
+            rust_targets: x86_64-apple-darwin
+            asset_name: KidBuddy_macOS-Intel.dmg
+            find_pattern: '*.dmg'
+          - platform: ubuntu-22.04
+            args: ''
+            rust_targets: ''
+            asset_name: KidBuddy_Linux_amd64.deb
+            find_pattern: '*.deb'
+          - platform: windows-latest
+            args: ''
+            rust_targets: ''
+            asset_name: KidBuddy_Windows_x64.exe
+            find_pattern: '*-setup.exe'
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install system dependencies (Ubuntu)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # Build only — no tagName/releaseName here, so tauri-action does NOT
+      # upload its default-named artifacts. We upload renamed files ourselves.
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: ${{ matrix.args }}
+
+      # Find the built artifact and upload it under a clear, platform-specific name.
+      - name: Upload renamed asset (Unix)
+        if: matrix.platform != 'windows-latest'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          FILE=$(find src-tauri/target -name "${{ matrix.find_pattern }}" | head -1)
+          if [ -z "$FILE" ]; then
+            echo "No artifact matching ${{ matrix.find_pattern }} found"
+            exit 1
+          fi
+          cp "$FILE" "${{ matrix.asset_name }}"
+          gh release upload "${{ github.ref_name }}" "${{ matrix.asset_name }}" \
+            --repo "${{ github.repository }}" --clobber
+
+      - name: Upload renamed asset (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $file = Get-ChildItem -Path src-tauri/target -Recurse -Filter "${{ matrix.find_pattern }}" | Select-Object -First 1
+          if (-not $file) {
+            Write-Error "No artifact matching ${{ matrix.find_pattern }} found"
+            exit 1
+          }
+          Copy-Item $file.FullName "${{ matrix.asset_name }}"
+          gh release upload "${{ github.ref_name }}" "${{ matrix.asset_name }}" `
+            --repo "${{ github.repository }}" --clobber
+
+  publish-release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release edit "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" \
+            --draft=false \
+            --latest

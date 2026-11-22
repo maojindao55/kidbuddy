@@ -1,0 +1,18 @@
+{
+  "aiGroup": {
+    "title": "Character group settings",
+    "basicInfo": "Basic info",
+    "groupNamePlaceholder": "Group name",
+    "groupDescriptionPlaceholder": "Description (optional)",
+    "speechMode": "Speaking mode",
+    "pickCharacters": "Choose characters",
+    "pickCharactersPlaceholder": "Select characters to join...",
+    "members": "Members ({{count}})",
+    "quickAddHint": "Click to add to the group",
+    "muted": "Muted",
+    "unmute": "Unmute",
+    "mute": "Mute",
+    "removeMember": "Remove member",
+    "selfName": "Me"
+  }
+}

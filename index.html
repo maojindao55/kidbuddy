@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/x-icon" href="/chat_bubble.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>KidBuddy</title>
+    <!-- 运行时配置文件 - 在应用加载前加载配置 -->
+    <script src="/config.js"></script>
+    <!-- 预上色：在 React/CSS 加载前根据已存主题给文档上背景色，避免整页重载时白屏闪烁（尤其深色模式） -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('theme') || 'system';
+          var prefersDark =
+            window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var dark = t === 'dark' || (t === 'system' && prefersDark);
+          var de = document.documentElement;
+          if (dark) de.classList.add('dark');
+          de.style.backgroundColor = dark ? '#121110' : '#f7f6f4';
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html> 

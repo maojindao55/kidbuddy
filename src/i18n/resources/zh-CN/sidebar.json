@@ -1,0 +1,33 @@
+{
+  "section": {
+    "workspace": "工作区",
+    "groups": "群聊"
+  },
+  "nav": {
+    "home": "首页",
+    "kidMode": "返回儿童模式",
+    "createGroup": "创建新群聊",
+    "settings": "设置"
+  },
+  "actions": {
+    "editGroup": "编辑群聊",
+    "deleteGroup": "删除群聊",
+    "groupMenu": "群聊操作"
+  },
+  "preferences": {
+    "title": "外观与语言",
+    "appearance": "外观",
+    "language": "语言",
+    "themeSystem": "跟随系统",
+    "themeLight": "浅色模式",
+    "themeDark": "深色模式"
+  },
+  "version": {
+    "check": "检查更新",
+    "checking": "检查中…",
+    "latest": "当前已是最新版本",
+    "available": "发现新版本 v{{version}}",
+    "updateAction": "前往下载",
+    "error": "检查更新失败，请稍后重试"
+  }
+}

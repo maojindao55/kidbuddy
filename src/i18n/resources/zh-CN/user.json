@@ -1,0 +1,13 @@
+{
+  "defaultNickname": "本地用户",
+  "avatarFallback": "我",
+  "nicknamePlaceholder": "输入新昵称",
+  "toast": {
+    "nicknameUpdated": "更新昵称成功",
+    "nicknameUpdateFailed": "更新昵称失败",
+    "avatarUpdated": "头像已更新",
+    "avatarUploadFailed": "上传头像失败",
+    "avatarInvalidType": "请选择图片文件",
+    "avatarTooLarge": "图片不能超过 5MB"
+  }
+}

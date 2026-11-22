@@ -1,0 +1,61 @@
+{
+  "memberPicker": {
+    "defaultPlaceholder": "Select resources..."
+  },
+  "init": {
+    "loadFailed": "Failed to load. Please refresh and try again.",
+    "groupNotFound": "Group not found or access denied",
+    "initDataFailed": "Failed to initialize data"
+  },
+  "actions": {
+    "backHome": "Back to home"
+  },
+  "systemSender": "System",
+  "errors": {
+    "memberNotFound": "Dev member not found",
+    "requestFailed": "Request failed",
+    "streamUnavailable": "Could not read response stream",
+    "timeout": "Response timed out",
+    "serviceUnavailable": "Sorry, the service is temporarily unavailable.",
+    "appendError": "[Error: {{error}}]"
+  },
+  "messages": {},
+  "placeholders": {
+    "aiInput": "Send a message in the character group..."
+  },
+  "status": {
+    "thinking": "Thinking",
+    "running": "Streaming",
+    "completed": "✅ Completed",
+    "failed": "❌ Failed",
+    "cancelled": "⏹ Cancelled",
+    "timeout": "⏰ Timed out"
+  },
+  "serviceError": "Sorry, something went wrong ({{message}}).",
+  "unknownError": "Unknown error",
+  "conversation": {
+    "title": "Chats",
+    "new": "New chat",
+    "untitled": "New chat",
+    "searchPlaceholder": "Search chats...",
+    "showArchived": "Archived",
+    "empty": "No chats yet\nSend a message to start a new chat",
+    "emptySearch": "No matching chats",
+    "emptyPreview": "No messages yet",
+    "youPrefix": "You",
+    "rename": "Rename",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "archive": "Archive",
+    "unarchive": "Unarchive",
+    "delete": "Delete chat",
+    "moreActions": "More actions",
+    "archivedTag": "Archived",
+    "deleteConfirmTitle": "Delete chat \"{{name}}\"?",
+    "deleteConfirmContent": "This chat's history will be permanently deleted and cannot be recovered.",
+    "expand": "Expand chat list",
+    "runningTip": "Running in background",
+    "unreadTip": "New result available"
+  },
+  "groupSettings": "Group settings"
+}

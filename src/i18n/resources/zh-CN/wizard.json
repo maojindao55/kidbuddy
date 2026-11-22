@@ -1,0 +1,36 @@
+{
+  "typeStep": {
+    "intro": "选择一个群聊场景，把合适的成员拉进来。"
+  },
+  "basicStep": {
+    "nameLabel": "群名称 *",
+    "namePlaceholder": "给群聊起个名字",
+    "descriptionLabel": "群描述",
+    "descriptionPlaceholder": "用一两句话描述这个群聊..."
+  },
+  "membersStep": {
+    "pickCharacters": "选择角色加入群聊",
+    "characterPlaceholder": "选择角色...",
+    "emptyDescription": "暂无{{resource}}，请先在设置中创建",
+    "goLibrary": "去设置中新建",
+    "openLibraryHint": "请从侧边栏打开设置后新建"
+  },
+  "configStep": {
+    "speechMode": "发言方式"
+  },
+  "steps": {
+    "type": "选择群聊场景",
+    "basic": "基础信息",
+    "members": "选择成员",
+    "config": "群聊设置",
+    "shortType": "类型",
+    "shortBasic": "基础",
+    "shortMembers": "成员",
+    "shortConfig": "配置"
+  },
+  "actions": {
+    "previous": "上一步",
+    "next": "下一步",
+    "createGroup": "创建群聊"
+  }
+}

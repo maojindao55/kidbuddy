@@ -1,0 +1,48 @@
+{
+  "name": "kidbuddy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "test": "node scripts/run-tests.mjs",
+    "test:llm": "node src/utils/llmClient.test.mjs && node src/utils/markdownContent.test.mjs",
+    "test:product": "node src/config/aiMembers.test.mjs && node src/config/ageProfile.test.mjs && node src/config/kidCompanion.test.mjs && node src/config/kidLocalState.test.mjs && node src/config/tokenPlan.test.mjs && node src/config/kidArt.test.mjs && node src/config/kidEnglish.test.mjs",
+    "test:i18n": "node src/i18n/resources.test.mjs",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "icon:gen": "tauri icon src-tauri/icons/icon-source.png -o src-tauri/icons",
+    "release": "bash scripts/release.sh",
+    "release:patch": "bash scripts/release.sh patch",
+    "release:minor": "bash scripts/release.sh minor",
+    "release:major": "bash scripts/release.sh major"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.2.0",
+    "@tauri-apps/plugin-opener": "^2.2.0",
+    "clsx": "^2.1.1",
+    "i18next": "^26.3.0",
+    "lucide-react": "^0.460.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-i18next": "^17.0.8",
+    "react-router-dom": "^7.4.0",
+    "sonner": "^2.0.0",
+    "tailwind-merge": "^2.6.0",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/typography": "^0.5.16",
+    "@tauri-apps/cli": "^2.2.0",
+    "@types/node": "^22.13.1",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.2.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.5.2",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.0.2",
+    "vite": "^5.0.0"
+  }
+}

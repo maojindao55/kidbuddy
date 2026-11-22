@@ -1,0 +1,13 @@
+{
+  "defaultNickname": "Local User",
+  "avatarFallback": "Me",
+  "nicknamePlaceholder": "Enter a new nickname",
+  "toast": {
+    "nicknameUpdated": "Nickname updated",
+    "nicknameUpdateFailed": "Failed to update nickname",
+    "avatarUpdated": "Avatar updated",
+    "avatarUploadFailed": "Failed to upload avatar",
+    "avatarInvalidType": "Please select an image file",
+    "avatarTooLarge": "Image must be 5MB or smaller"
+  }
+}

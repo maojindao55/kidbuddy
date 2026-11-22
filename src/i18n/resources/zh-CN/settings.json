@@ -1,0 +1,18 @@
+{
+  "aiGroup": {
+    "title": "AI 群聊配置",
+    "basicInfo": "基础信息",
+    "groupNamePlaceholder": "群名称",
+    "groupDescriptionPlaceholder": "群描述（可选）",
+    "speechMode": "发言方式",
+    "pickCharacters": "选择角色",
+    "pickCharactersPlaceholder": "选择角色加入群聊...",
+    "members": "群友（{{count}}）",
+    "quickAddHint": "点击添加到群聊",
+    "muted": "已禁言",
+    "unmute": "取消禁言",
+    "mute": "禁言",
+    "removeMember": "移除成员",
+    "selfName": "我"
+  }
+}

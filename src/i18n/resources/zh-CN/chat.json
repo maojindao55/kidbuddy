@@ -1,0 +1,61 @@
+{
+  "memberPicker": {
+    "defaultPlaceholder": "选择资源..."
+  },
+  "init": {
+    "loadFailed": "加载失败，请刷新重试",
+    "groupNotFound": "群聊不存在或无权访问",
+    "initDataFailed": "初始化数据失败"
+  },
+  "actions": {
+    "backHome": "返回首页"
+  },
+  "systemSender": "系统提示",
+  "errors": {
+    "memberNotFound": "找不到该 CLI Agent",
+    "requestFailed": "请求失败",
+    "streamUnavailable": "无法获取响应流",
+    "timeout": "响应超时",
+    "serviceUnavailable": "对不起，服务暂时无法响应。",
+    "appendError": "[错误: {{error}}]"
+  },
+  "messages": {},
+  "placeholders": {
+    "aiInput": "在角色群里输入消息..."
+  },
+  "status": {
+    "thinking": "思考中",
+    "running": "输出中",
+    "completed": "✅ 已完成",
+    "failed": "❌ 运行失败",
+    "cancelled": "⏹ 已取消",
+    "timeout": "⏰ 执行超时"
+  },
+  "serviceError": "对不起，服务出错({{message}})。",
+  "unknownError": "未知错误",
+  "conversation": {
+    "title": "会话",
+    "new": "新建会话",
+    "untitled": "新会话",
+    "searchPlaceholder": "搜索会话...",
+    "showArchived": "归档",
+    "empty": "还没有会话\n发送一条消息开始新会话",
+    "emptySearch": "没有匹配的会话",
+    "emptyPreview": "暂无消息",
+    "youPrefix": "你",
+    "rename": "重命名",
+    "pin": "置顶",
+    "unpin": "取消置顶",
+    "archive": "归档",
+    "unarchive": "取消归档",
+    "delete": "删除会话",
+    "moreActions": "更多操作",
+    "archivedTag": "已归档",
+    "deleteConfirmTitle": "删除会话「{{name}}」？",
+    "deleteConfirmContent": "该会话的聊天记录将被永久删除，无法恢复。",
+    "expand": "展开会话列表",
+    "runningTip": "后台执行中",
+    "unreadTip": "有新结果"
+  },
+  "groupSettings": "群设置"
+}

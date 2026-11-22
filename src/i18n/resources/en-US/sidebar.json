@@ -1,0 +1,33 @@
+{
+  "section": {
+    "workspace": "Workspace",
+    "groups": "Groups"
+  },
+  "nav": {
+    "home": "Home",
+    "kidMode": "Back to Kids Mode",
+    "createGroup": "New Group",
+    "settings": "Settings"
+  },
+  "actions": {
+    "editGroup": "Edit Group",
+    "deleteGroup": "Delete Group",
+    "groupMenu": "Group actions"
+  },
+  "preferences": {
+    "title": "Appearance & language",
+    "appearance": "Theme",
+    "language": "Lang",
+    "themeSystem": "Follow system",
+    "themeLight": "Light mode",
+    "themeDark": "Dark mode"
+  },
+  "version": {
+    "check": "Check updates",
+    "checking": "Checking…",
+    "latest": "You're on the latest version",
+    "available": "New version v{{version}} available",
+    "updateAction": "Download",
+    "error": "Update check failed, please try again"
+  }
+}

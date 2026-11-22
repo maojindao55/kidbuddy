@@ -1,0 +1,54 @@
+{
+  "title": "Library",
+  "closeAria": "Close library",
+  "tabs": {
+    "cli": "CLI Agents",
+    "providers": "Model providers",
+    "llm": "AI characters",
+    "agent": "Legacy experts"
+  },
+  "empty": {
+    "resources": "No resources yet",
+    "providers": "No model providers yet. Use the button above to add one."
+  },
+  "create": {
+    "cli": "New CLI Agent",
+    "llm": "New AI character",
+    "agent": "New legacy expert",
+    "provider": "New model provider"
+  },
+  "meta": {
+    "model": "Model:",
+    "schedulerTag": "Scheduler tag:",
+    "role": "Role:",
+    "tools": "Tools:",
+    "unboundProvider": "⚠️ Provider not bound",
+    "baseUrl": "Base URL:",
+    "modelsCount": "{{count}}",
+    "models": "Models:",
+    "secret": "API key:",
+    "secretConfigured": "Configured",
+    "secretMissing": "Not configured",
+    "noDescription": "No description"
+  },
+  "deleteMember": {
+    "blockedTitle": "Cannot delete directly",
+    "inUseIntro": "Resource {{name}} is used by these groups:",
+    "inUseHint": "Remove it from the groups above before deleting.",
+    "confirmTitle": "Delete this resource?",
+    "confirmForked": "Delete \"{{name}}\"? This restores the official default configuration.",
+    "confirmDefault": "Delete resource \"{{name}}\"? This cannot be undone."
+  },
+  "deleteProvider": {
+    "confirmTitle": "Delete this model provider?",
+    "confirmContent": "Delete \"{{name}}\"? This cannot be undone."
+  },
+  "provider": {
+    "builtinDeleteTooltip": "Built-in presets cannot be deleted",
+    "copiedToast": "Copied as \"{{name}}\"",
+    "copyFailed": "Copy failed"
+  },
+  "toast": {
+    "editOpenFailed": "Could not open editor"
+  }
+}

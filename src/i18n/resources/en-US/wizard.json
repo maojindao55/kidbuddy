@@ -1,0 +1,36 @@
+{
+  "typeStep": {
+    "intro": "Pick a group scenario and invite the right members."
+  },
+  "basicStep": {
+    "nameLabel": "Group name *",
+    "namePlaceholder": "Give this group a name",
+    "descriptionLabel": "Description",
+    "descriptionPlaceholder": "Describe this group in one or two sentences..."
+  },
+  "membersStep": {
+    "pickCharacters": "Choose characters to join the group",
+    "characterPlaceholder": "Select characters...",
+    "emptyDescription": "No {{resource}} yet. Create one in Settings first.",
+    "goLibrary": "Create in Settings",
+    "openLibraryHint": "Open Settings from the sidebar to create one"
+  },
+  "configStep": {
+    "speechMode": "Speaking mode"
+  },
+  "steps": {
+    "type": "Choose scenario",
+    "basic": "Basic info",
+    "members": "Choose members",
+    "config": "Group settings",
+    "shortType": "Type",
+    "shortBasic": "Basic",
+    "shortMembers": "Members",
+    "shortConfig": "Config"
+  },
+  "actions": {
+    "previous": "Previous",
+    "next": "Next",
+    "createGroup": "Create group"
+  }
+}
