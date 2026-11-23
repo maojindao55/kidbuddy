@@ -253,7 +253,7 @@ export default function KidExpression() {
           <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h2 className="text-xl font-extrabold text-slate-800">选一个目标开始练</h2>
             <span className="text-xs font-bold text-slate-400">
-              先按学段（B → G → K），段内由易到难；圆圈数字是全表台阶 1–10，分组后段内会跳号
+              先按学段（B → G → K），段内由易到难；圆圈数字是全表台阶 1–10，与目标编号同向递增
             </span>
           </div>
 

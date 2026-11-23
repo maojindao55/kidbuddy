@@ -19,13 +19,29 @@ const { EXPRESSION_TARGETS, EXPRESSION_TARGETS_BY_DIFFICULTY, targetsForBand, ti
   assert.deepEqual(steps, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], '难度序号必须连续，否则「由易到难」会出现空档');
 }
 
-// ---- 排序：按 VB-MAPP 语言操作获得顺序 ----
+// ---- 排序：编号即台阶，B5 → G1 → G2 → G4 → G5 → K1 … K5 ----
 {
   assert.deepEqual(
     EXPRESSION_TARGETS_BY_DIFFICULTY.map((t) => t.id),
-    ['B5', 'G1', 'G2', 'K2', 'K3', 'G5', 'G4', 'K1', 'K4', 'K5'],
-    '顺序必须是 请求→命名→句长→拒绝→求助→语用→问答→叙述→复述→转述',
+    ['B5', 'G1', 'G2', 'G4', 'G5', 'K1', 'K2', 'K3', 'K4', 'K5'],
+    '台阶顺序必须和编号一致',
   );
+}
+
+// ---- 编号必须跟着易到难走：每个学段内，ID 的尾号要随台阶递增 ----
+{
+  const ranks = { B: 0, G: 1, K: 2 };
+  const list = EXPRESSION_TARGETS_BY_DIFFICULTY;
+  for (let i = 1; i < list.length; i += 1) {
+    const prev = list[i - 1];
+    const cur = list[i];
+    const prevBand = ranks[prev.id[0]];
+    const curBand = ranks[cur.id[0]];
+    assert.ok(
+      curBand > prevBand || (curBand === prevBand && Number(cur.id.slice(1)) > Number(prev.id.slice(1))),
+      `${cur.id} 排在 ${prev.id} 后面，但编号没有递增——编号和台阶打架了`,
+    );
+  }
 }
 
 // ---- 必须包含 VB-MAPP 最靠前的两个操作起点，否则 ASD / 发育迟缓孩子没有入口 ----
@@ -36,13 +52,16 @@ const { EXPRESSION_TARGETS, EXPRESSION_TARGETS_BY_DIFFICULTY, targetsForBand, ti
   assert.equal(EXPRESSION_TARGETS_BY_DIFFICULTY[0].id, 'B5', '最容易的一条应该是请求');
 }
 
-// ---- VB-MAPP 阶段必须随台阶单调不降：不能出现「先练 L3 再练 L1」 ----
+// ---- 学段的最高 VB-MAPP 阶段不能倒退 ----
+// 段内允许回落：代码表按年龄分段，K 段里的 K2 拒绝、K3 求助在 VB-MAPP 里是 Mand L2，
+// 比 K1 的 Intraverbal L3 低，这是「同一功能在学龄段更独立」的正常现象。
 {
-  const list = EXPRESSION_TARGETS_BY_DIFFICULTY;
-  for (let i = 1; i < list.length; i += 1) {
+  const maxLevel = (band) => Math.max(...mod.targetsForBand(band).map((t) => t.vbMapp.level));
+  const order = ['infant', 'preschool', 'school'];
+  for (let i = 1; i < order.length; i += 1) {
     assert.ok(
-      list[i].vbMapp.level >= list[i - 1].vbMapp.level,
-      `${list[i].id} 的 VB-MAPP 阶段比上一条还低，顺序有问题`,
+      maxLevel(order[i]) >= maxLevel(order[i - 1]),
+      `${order[i]} 段的最高 VB-MAPP 阶段比上一段还低`,
     );
   }
 }
@@ -79,8 +98,8 @@ const { EXPRESSION_TARGETS, EXPRESSION_TARGETS_BY_DIFFICULTY, targetsForBand, ti
 // ---- 分学段取目标时也要保持由易到难 ----
 {
   assert.deepEqual(targetsForBand('infant').map((t) => t.id), ['B5']);
-  assert.deepEqual(targetsForBand('preschool').map((t) => t.id), ['G1', 'G2', 'G5', 'G4']);
-  assert.deepEqual(targetsForBand('school').map((t) => t.id), ['K2', 'K3', 'K1', 'K4', 'K5']);
+  assert.deepEqual(targetsForBand('preschool').map((t) => t.id), ['G1', 'G2', 'G4', 'G5']);
+  assert.deepEqual(targetsForBand('school').map((t) => t.id), ['K1', 'K2', 'K3', 'K4', 'K5']);
   for (const band of ['infant', 'preschool', 'school']) {
     const list = targetsForBand(band);
     for (let i = 1; i < list.length; i += 1) {
@@ -99,8 +118,8 @@ const { EXPRESSION_TARGETS, EXPRESSION_TARGETS_BY_DIFFICULTY, targetsForBand, ti
   );
   assert.deepEqual(groups.map((g) => g.targets.map((t) => t.id)), [
     ['B5'],
-    ['G1', 'G2', 'G5', 'G4'],
-    ['K2', 'K3', 'K1', 'K4', 'K5'],
+    ['G1', 'G2', 'G4', 'G5'],
+    ['K1', 'K2', 'K3', 'K4', 'K5'],
   ]);
   for (const g of groups) {
     for (let i = 1; i < g.targets.length; i += 1) {
@@ -112,7 +131,7 @@ const { EXPRESSION_TARGETS, EXPRESSION_TARGETS_BY_DIFFICULTY, targetsForBand, ti
 // ---- 学前孩子打开时，K 段不会被夹在 B/G 中间 ----
 {
   const order = mod.EXPRESSION_TARGETS_BY_STAGE.map((t) => t.id);
-  assert.deepEqual(order, ['B5', 'G1', 'G2', 'G5', 'G4', 'K2', 'K3', 'K1', 'K4', 'K5']);
+  assert.deepEqual(order, ['B5', 'G1', 'G2', 'G4', 'G5', 'K1', 'K2', 'K3', 'K4', 'K5']);
   const firstKSchool = order.findIndex((id) => id.startsWith('K'));
   const lastGPreschool = order.map((id) => id.startsWith('G')).lastIndexOf(true);
   assert.ok(firstKSchool > lastGPreschool, 'K 段必须整体排在 G 段之后');
@@ -121,8 +140,8 @@ const { EXPRESSION_TARGETS, EXPRESSION_TARGETS_BY_DIFFICULTY, targetsForBand, ti
 // ---- 单个学段筛选：只返回该段，且顺序不乱 ----
 {
   assert.deepEqual(mod.stageGroups('infant').map((g) => g.stage.band), ['infant']);
-  assert.deepEqual(mod.stageGroups('preschool').map((g) => g.targets.map((t) => t.id)), [['G1', 'G2', 'G5', 'G4']]);
-  assert.deepEqual(mod.stageGroups('school').map((g) => g.targets.map((t) => t.id)), [['K2', 'K3', 'K1', 'K4', 'K5']]);
+  assert.deepEqual(mod.stageGroups('preschool').map((g) => g.targets.map((t) => t.id)), [['G1', 'G2', 'G4', 'G5']]);
+  assert.deepEqual(mod.stageGroups('school').map((g) => g.targets.map((t) => t.id)), [['K1', 'K2', 'K3', 'K4', 'K5']]);
   assert.equal(mod.stageGroups('preschool').length, 1);
 }
 
@@ -136,7 +155,7 @@ const { EXPRESSION_TARGETS, EXPRESSION_TARGETS_BY_DIFFICULTY, targetsForBand, ti
 // ---- 建议目标跟着学段顺序走：先把 B 段做完再看 G ----
 {
   assert.equal(mod.suggestNextTarget(['B5']).id, 'G1');
-  assert.equal(mod.suggestNextTarget(['B5', 'G1', 'G2', 'G5', 'G4']).id, 'K2', 'G 段清完后才进 K 段');
+  assert.equal(mod.suggestNextTarget(['B5', 'G1', 'G2', 'G4', 'G5']).id, 'K1', 'G 段清完后才进 K 段');
 }
 
 
