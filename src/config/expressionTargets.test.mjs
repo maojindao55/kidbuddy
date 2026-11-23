@@ -290,3 +290,60 @@ const { EXPRESSION_TARGETS, EXPRESSION_TARGETS_BY_DIFFICULTY, targetsForBand, ti
   // 传了不存在的名字要退回默认，不能让题干空掉
   assert.equal(fillSlots('把{item}举起来', slots, { item: '不存在的' }), '把泡泡水举起来', '非法选择退回默认');
 }
+
+// ---- 题库要够丰富，且 id 不重复（抽题靠 id 记轮换） ----
+{
+  for (const t of EXPRESSION_TARGETS_BY_DIFFICULTY) {
+    assert.equal(t.tasks.length, 8, `${t.id} 应该有 8 道题，现在 ${t.tasks.length} 道`);
+    const ids = t.tasks.map((x) => x.id);
+    assert.equal(new Set(ids).size, ids.length, `${t.id} 有重复的题目 id`);
+    // 题干不能两道一模一样，否则「丰富」是假的
+    const asks = t.tasks.map((x) => x.ask);
+    assert.equal(new Set(asks).size, asks.length, `${t.id} 有两道题题干完全相同`);
+  }
+}
+
+// ---- 抽题轮换：没练过优先，抽到的保持题库原顺序 ----
+{
+  const { pickSessionTasks, recordTaskUsage, SESSION_TASK_COUNT } = mod;
+  const b5 = mod.getExpressionTarget('B5');
+  assert.equal(SESSION_TASK_COUNT, 4, '默认每节抽 4 道');
+
+  const first = pickSessionTasks(b5.tasks, 4, []);
+  assert.deepEqual(
+    first.map((t) => t.id),
+    ['B5-t1', 'B5-t2', 'B5-t3', 'B5-t4'],
+    '第一次应该按题库顺序抽前 4 道（由易到难）',
+  );
+
+  // 第二节：把第一节用过的记进去，应该换一批没用过的
+  const hist1 = recordTaskUsage([], ['B5-t1', 'B5-t2', 'B5-t3', 'B5-t4']);
+  assert.deepEqual(hist1, ['B5-t1', 'B5-t2', 'B5-t3', 'B5-t4']);
+  const second = pickSessionTasks(b5.tasks, 4, hist1);
+  assert.deepEqual(
+    second.map((t) => t.id),
+    ['B5-t5', 'B5-t6', 'B5-t7', 'B5-t8'],
+    '第二节要换成没练过的 4 道',
+  );
+
+  // 第三节：8 道都练过了，应该回到最早那批
+  const hist2 = recordTaskUsage(hist1, ['B5-t5', 'B5-t6', 'B5-t7', 'B5-t8']);
+  const third = pickSessionTasks(b5.tasks, 4, hist2);
+  assert.deepEqual(
+    third.map((t) => t.id),
+    ['B5-t1', 'B5-t2', 'B5-t3', 'B5-t4'],
+    '练完一轮后回到最早那批，形成循环',
+  );
+
+  // 连续换一批不能给出同一组
+  const again = pickSessionTasks(b5.tasks, 4, [...hist1, ...['B5-t5', 'B5-t6', 'B5-t7', 'B5-t8']]);
+  assert.notDeepEqual(again.map((t) => t.id), ['B5-t5', 'B5-t6', 'B5-t7', 'B5-t8'], '换一批不能原样返回');
+}
+
+// ---- 使用记录：只留最近 N 条，重复使用要挪到末尾 ----
+{
+  const { recordTaskUsage } = mod;
+  assert.deepEqual(recordTaskUsage(['a', 'b', 'c'], ['b'], 10), ['a', 'c', 'b'], '重用的要挪到末尾');
+  const long = recordTaskUsage(['a', 'b', 'c'], ['d'], 3);
+  assert.deepEqual(long, ['b', 'c', 'd'], '超出上限要丢最旧的');
+}

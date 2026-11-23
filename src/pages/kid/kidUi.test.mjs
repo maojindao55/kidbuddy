@@ -112,8 +112,24 @@ assert.match(exprPlay, /materials: picks/, '记录里要存下实际用的教具
 assert.match(exprPlay, /skipCurrent/, '要有单题跳过');
 assert.match(exprPlay, /skip-trial/, '跳过按钮要可点');
 assert.match(exprPlay, /skipped: true/, '跳过要写进记录，不能只是界面消失');
-assert.doesNotMatch(exprPlay, /setIdx\(0\);\s*setLines\(\[\]\);/, '改遍数不允许整节课清空重来');
+// 改遍数不能整节课清空重来；「换一批」是重新抽题，清空是应该的，所以只查 changeRepeats 函数体
+{
+  const start = exprPlay.indexOf('const changeRepeats');
+  const end = exprPlay.indexOf('const changeMaterial', start);
+  assert.ok(start > 0 && end > start, '找不到 changeRepeats 函数');
+  const body = exprPlay.slice(start, end);
+  assert.doesNotMatch(body, /setIdx\(0\)/, '改遍数不允许把当前试次重置回第一题');
+  assert.doesNotMatch(body, /setLines\(\[\]\)/, '改遍数不允许清空对话记录');
+  assert.match(body, /kept/, '改遍数要保留已判定的试次');
+}
 // 反馈页不管对错都要能再练一遍
 assert.doesNotMatch(exprPlay, /\{!feedbackCorrect && \(\s*<button/, '答对也要能加练一遍');
+
+// 题库轮换：一节只抽 4 道，练过的往后排
+assert.match(exprPlay, /pickSessionTasks/, '练习页要按轮换抽题');
+assert.match(exprPlay, /task-pool/, '要显示本节抽到几道 / 题库共几道');
+assert.match(exprPlay, /redraw-tasks/, '要有「换一批」');
+assert.match(exprPlay, /kidbuddy\.expression\.rotation/, '轮换记录要存本地，不然每次都是同一批');
+assert.doesNotMatch(exprPlay, /fillTasks\(target\.tasks/, '换教具时只能重填本节抽到的题，不能重填整个题库');
 
 console.log('kidUi.test.mjs: ok');

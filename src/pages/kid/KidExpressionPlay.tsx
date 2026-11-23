@@ -2,9 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import {
   MODALITY_LABEL,
+  SESSION_TASK_COUNT,
   fillSlots,
   getExpressionTarget,
   materialLine,
+  pickSessionTasks,
+  recordTaskUsage,
   resolvePicks,
   type ExpressionTarget,
   type ExpressionTask,
@@ -67,6 +70,31 @@ const COACH: KidCompanion = {
 const STUDENT_KEY = 'kidbuddy.expression.student';
 const SUBJECT_KEY = 'kidbuddy.expression.by';
 const MATERIAL_KEY = 'kidbuddy.expression.materials';
+const ROTATION_KEY = 'kidbuddy.expression.rotation';
+
+/** 这个孩子在这个目标上最近练过哪几道题，越靠后越新 */
+function readRotation(student: string, targetId: string): string[] {
+  try {
+    const raw = localStorage.getItem(ROTATION_KEY);
+    if (!raw) return [];
+    const all = JSON.parse(raw) as Record<string, string[]>;
+    return all[`${student}::${targetId}`] ?? [];
+  } catch {
+    return [];
+  }
+}
+
+function writeRotation(student: string, targetId: string, usedIds: string[]): void {
+  try {
+    const raw = localStorage.getItem(ROTATION_KEY);
+    const all = raw ? (JSON.parse(raw) as Record<string, string[]>) : {};
+    const key = `${student}::${targetId}`;
+    all[key] = recordTaskUsage(all[key] ?? [], usedIds);
+    localStorage.setItem(ROTATION_KEY, JSON.stringify(all));
+  } catch {
+    // 存不进去最多下次重复抽同一批题，不影响这节课
+  }
+}
 
 /** 按目标记住上次选的教具，换个教室不用重新选 */
 function readPicks(targetId: string): Record<string, string> {
@@ -187,9 +215,20 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
   const listRef = useRef<HTMLDivElement>(null);
   const startedRef = useRef(false);
 
+  const student = readStudent(memory.nickname || '小朋友');
+  const by = readSubject();
+
   const [picks, setPicks] = useState<Record<string, string>>(() => resolvePicks(target.materials, readPicks(target.id)));
   const [showMaterials, setShowMaterials] = useState(true);
-  const tasks = useMemo(() => fillTasks(target.tasks, target.materials, picks), [target, picks]);
+  /** 本节抽到的题（题库有 8 道，一节只练 4 道，按「多久没练过」轮换） */
+  const [drawnIds, setDrawnIds] = useState<string[]>(() =>
+    pickSessionTasks(target.tasks, SESSION_TASK_COUNT, readRotation(student, target.id)).map((t) => t.id),
+  );
+  const drawnTasks = useMemo(() => {
+    const byId = new Map(target.tasks.map((t) => [t.id, t]));
+    return drawnIds.map((id) => byId.get(id)).filter((t): t is ExpressionTask => Boolean(t));
+  }, [target, drawnIds]);
+  const tasks = useMemo(() => fillTasks(drawnTasks, target.materials, picks), [drawnTasks, target, picks]);
   const [repeats, setRepeats] = useState(2);
   const [trials, setTrials] = useState<TrialSpec[]>(() => buildTrials(tasks, 2));
   const [rounds, setRounds] = useState<ExpressionRound[]>(() => buildTrials(tasks, 2).map((s) => makeRound(s, tasks)));
@@ -214,8 +253,6 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
   const [saved, setSaved] = useState<ExpressionSession | null>(null);
   const [showExport, setShowExport] = useState(false);
 
-  const student = readStudent(memory.nickname || '小朋友');
-  const by = readSubject();
   const fontSize = profile.band === 'preschool' ? 21 : 18;
 
   const spec = trials[Math.min(idx, trials.length - 1)];
@@ -232,10 +269,14 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
     [readAloud, voice.autoReadAloud],
   );
 
-  /** 起一个试次：说一遍指令，开 3 秒等待窗 */
+  /**
+   * 起一个试次：说一遍指令，开 3 秒等待窗。
+   * 第二个参数用于「刚换掉题库」的场景——那时 tasks 还是上一次渲染的值，
+   * 不显式传进来会念出上一批题。
+   */
   const startTrial = useCallback(
-    (trialSpec: TrialSpec) => {
-      const task = tasks[trialSpec.taskIndex];
+    (trialSpec: TrialSpec, taskList: ExpressionTask[] = tasks) => {
+      const task = taskList[trialSpec.taskIndex];
       setTrialStage('await');
       setWaitExpired(false);
       setShowPromptPicker(false);
@@ -297,7 +338,8 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
     const nextPicks = { ...picks, [slotKey]: name };
     setPicks(nextPicks);
     writePicks(target.id, nextPicks);
-    const nextTasks = fillTasks(target.tasks, target.materials, nextPicks);
+    // 只重填本节抽到的那几道，试次下标是按这一批算的
+    const nextTasks = fillTasks(drawnTasks, target.materials, nextPicks);
     const nextRounds = trials.map((s, i) => {
       const old = roundsRef.current[i];
       if (old && (old.achievement !== null || old.skipped)) return old;
@@ -313,6 +355,24 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
       setAnswerDraft('');
       setTrialSeq((n) => n + 1);
     }
+  };
+
+  /** 换一批：还没开始判定时，从题库里另外抽几道 */
+  const redraw = () => {
+    if (roundsRef.current.some((r) => r.achievement !== null || r.skipped)) return;
+    const nextDrawn = pickSessionTasks(target.tasks, SESSION_TASK_COUNT, [
+      ...readRotation(student, target.id),
+      ...drawnIds,
+    ]);
+    const nextTasks = fillTasks(nextDrawn, target.materials, picks);
+    const nextTrials = buildTrials(nextTasks, repeats);
+    setDrawnIds(nextDrawn.map((t) => t.id));
+    setTrials(nextTrials);
+    persistRounds(nextTrials.map((s) => makeRound(s, nextTasks)));
+    setIdx(0);
+    setLines([]);
+    pushCoach('换一批题，我们重新开始。');
+    startTrial(nextTrials[0], nextTasks);
   };
 
   /** 孩子说完了：先把原话记下来，进入待判定 */
@@ -430,6 +490,7 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
       createdAt: Date.now(),
     };
     addSession(book, session);
+    writeRotation(student, target.id, drawnIds);
     setSaved(session);
     setPhase('saved');
   };
@@ -787,6 +848,20 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-violet-50 px-3 py-2" data-testid="task-pool">
+            <span className="text-xs font-bold text-violet-700">
+              本节抽到 {drawnIds.length} 道 / 题库共 {target.tasks.length} 道
+            </span>
+            <button
+              type="button"
+              onClick={redraw}
+              data-testid="redraw-tasks"
+              className="h-12 rounded-xl bg-white px-3 text-xs font-bold text-violet-600 shadow-sm"
+            >
+              换一批
+            </button>
           </div>
 
           <div className="rounded-2xl border-2 border-rose-200 bg-white p-4">

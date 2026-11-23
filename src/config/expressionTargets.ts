@@ -137,6 +137,45 @@ export function materialLine(materials: MaterialSlot[], picks: Record<string, st
   return materials.map((slot) => `${slot.label}：${chosen[slot.key]}`).join('；');
 }
 
+/** 一节课默认抽几道题：每个目标有 8 道，全练一遍会拖太长 */
+export const SESSION_TASK_COUNT = 4;
+
+/**
+ * 从题库里抽出这一节课要练的题。
+ *
+ * 顺序不是随机，而是按「多久没练过」：
+ * 从没练过的最优先 → 越早练过的越靠前 → 最近练过的排最后。
+ * 抽完仍按题库原顺序返回（题库本身由易到难），所以同一目标连着上几次课，
+ * 题会自然轮换，不会每次都撞同样那 4 道，也不会一上来就抽到最难的那道。
+ */
+export function pickSessionTasks(
+  tasks: ExpressionTask[],
+  count: number = SESSION_TASK_COUNT,
+  history: string[] = [],
+): ExpressionTask[] {
+  if (tasks.length <= count) return tasks;
+  const lastUsed = new Map<string, number>();
+  history.forEach((id, i) => lastUsed.set(id, i));
+  const order = new Map(tasks.map((t, i) => [t.id, i]));
+  const rank = (id: string): number => (lastUsed.has(id) ? (lastUsed.get(id) as number) : -1);
+  const ranked = [...tasks].sort((a, b) => {
+    const ra = rank(a.id);
+    const rb = rank(b.id);
+    if (ra !== rb) return ra - rb;
+    // 都没练过时按题库原顺序取，不能按 id 字符串排——否则 t10 会排到 t2 前面
+    return (order.get(a.id) as number) - (order.get(b.id) as number);
+  });
+  const chosen = new Set(ranked.slice(0, count).map((t) => t.id));
+  return tasks.filter((t) => chosen.has(t.id));
+}
+
+/** 记下这次练了哪几道：越靠后越新；只留最近 keep 条，避免无限长 */
+export function recordTaskUsage(history: string[], usedIds: string[], keep = 24): string[] {
+  const used = new Set(usedIds);
+  const rest = history.filter((id) => !used.has(id));
+  return [...rest, ...usedIds].slice(-keep);
+}
+
 
 export interface ExpressionFamilyGuide {
   /** 练什么 */
@@ -244,6 +283,16 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
         ],
         fallback: '用他此刻真的想要的那样东西就行，吃的玩的都可以；实在没有，就把他正在玩的玩具拿在手里、举高，不给他。',
       },
+      {
+        key: 'toy',
+        label: '能玩起来的一样玩具（t6 / t7）',
+        options: [
+          { name: '秋千', word: '秋千', note: '推几下停住，动机最强' },
+          { name: '小汽车', word: '车', note: '推着跑，停住就要' },
+          { name: '泡泡水', word: '泡泡', note: '吹两下停住' },
+        ],
+        fallback: '任何能「玩到一半停下来」的东西都行，关键是他玩得正起劲时你停手。',
+      },
     ],
     tasks: [
       {
@@ -269,6 +318,30 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
         ask: '（张开手臂站在他面前，等他说）',
         hint: '「抱抱」',
         checks: ['说出「抱抱」或「举高」', '主动靠近你', '说完伸手要抱'],
+      },
+      {
+        id: 'B5-t5',
+        ask: '（吃点心时间：把{item}放在桌上，只给他空碗和勺子）',
+        hint: '「{item.word}」',
+        checks: ['说出「{item.word}」', '没有直接用手抓', '说完看你一眼'],
+      },
+      {
+        id: 'B5-t6',
+        ask: '（推{toy}玩几下，然后停住不动，手扶着等他）',
+        hint: '「还要」',
+        checks: ['说出「还要」或「{toy.word}」', '没有自己动手推', '说完等你继续'],
+      },
+      {
+        id: 'B5-t7',
+        ask: '（他正伸手要{toy}，你把手挡在前面，不给也不说话）',
+        hint: '「给我」',
+        checks: ['说出「给我」或「{toy.word}」', '没有推开你的手', '说完看着你'],
+      },
+      {
+        id: 'B5-t8',
+        ask: '（出门前站在门口，手放在门把上，不开门，等他说）',
+        hint: '「开门」',
+        checks: ['说出「开门」或「走」', '没有自己拧门把', '说完看着你'],
       },
     ],
     familyGuide: {
@@ -336,6 +409,25 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
         ],
         fallback: '没有动作图就真人做动作让他说，或者拍他平时做这几件事的照片。',
       },
+      {
+        key: 'food',
+        label: '一样他爱吃、能切开的东西（t5）',
+        options: [
+          { name: '苹果', note: '最常见，切一片举起来问' },
+          { name: '香蕉' },
+          { name: '西瓜' },
+        ],
+        fallback: '用他正在吃的那样东西就行；切不开的（饼干、葡萄）直接举起来也一样。',
+      },
+      {
+        key: 'color',
+        label: '一组颜色分明的积木或卡片（t8）',
+        options: [
+          { name: '红黄蓝积木', note: '三原色最不容易混' },
+          { name: '红黄蓝绿卡片' },
+        ],
+        fallback: '衣服、玩具、餐具上都有颜色，指着他自己的东西问也一样。',
+      },
     ],
     tasks: [
       {
@@ -361,6 +453,30 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
         ask: '（走到窗边或玩具架前，指给他看）',
         hint: '「那是大树」',
         checks: ['在自然情境里主动说', '不是只在桌面卡上说', '一次活动里 ≥3 次'],
+      },
+      {
+        id: 'G1-t5',
+        ask: '（切水果时举起一片{food}）你看，这是什么？',
+        hint: '「这是{food}」',
+        checks: ['说出名称', '不是在说「要吃」', '≥2 次独立说出'],
+      },
+      {
+        id: 'G1-t6',
+        ask: '（在教室里走一圈，指门、窗、桌子、灯，一个一个问）',
+        hint: '「这是门」',
+        checks: ['≥3 样说对', '说的是名称不是「这个」', '换地方还能说'],
+      },
+      {
+        id: 'G1-t7',
+        ask: '（指着自己的身体部位问：这是什么？）',
+        hint: '「这是鼻子」',
+        checks: ['≥3 个部位说对', '指哪说哪', '不用提示'],
+      },
+      {
+        id: 'G1-t8',
+        ask: '（出示{color}的积木或卡片）这是什么颜色？',
+        hint: '「红色的」',
+        checks: ['≥3 个颜色说对', '不混着说「那个颜色」', '换东西还能说对'],
       },
     ],
     familyGuide: {
@@ -427,6 +543,26 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
         ],
         fallback: '拿任何一件他能叫出名字的东西都可以，位置词换成「桌子上面／椅子旁边」照样练。',
       },
+      {
+        key: 'sizePair',
+        label: '大小或长短差很多的两样东西（t5）',
+        options: [
+          { name: '大球和小球', note: '差别够大，一眼能看出' },
+          { name: '长铅笔和短铅笔' },
+          { name: '大熊和小熊' },
+        ],
+        fallback: '任何两个大小差别明显的东西都行；没有就用两只手比「大／小」。',
+      },
+      {
+        key: 'eventPic',
+        label: '一张有人在做事的图（t6）',
+        options: [
+          { name: '阿姨做饭的图' },
+          { name: '小朋友洗手的图' },
+          { name: '叔叔开车的图' },
+        ],
+        fallback: '真人做动作也行：你在旁边扫地、擦桌子，让他说「老师在扫地」。',
+      },
     ],
     tasks: [
       {
@@ -452,6 +588,30 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
         ask: '（回放刚才玩过的活动）刚才我们做了什么？说一句。',
         hint: '「我和老师玩小汽车」',
         checks: ['说出事件', '有对象', '三词以上'],
+      },
+      {
+        id: 'G2-t5',
+        ask: '（拿出{sizePair}）这两个比一比，说成一句话：什么样的什么。',
+        hint: '「大球和小球」',
+        checks: ['说出大小或长短', '带上物品名', '三词以上'],
+      },
+      {
+        id: 'G2-t6',
+        ask: '（出示一张有人在做事的图）说一句话：谁在做什么。',
+        hint: '「阿姨在做饭」',
+        checks: ['有主语', '有动作', '三词以上'],
+      },
+      {
+        id: 'G2-t7',
+        ask: '（把{toy}放进盒子，再拿出来）说一句话：{toy}在哪儿？',
+        hint: '「{toy}在盒子里面」',
+        checks: ['用上「在」', '说清里外', '三词以上'],
+      },
+      {
+        id: 'G2-t8',
+        ask: '（吃完点心后问）刚才你吃了什么？说一句完整的。',
+        hint: '「我吃了饼干」',
+        checks: ['有「我」', '说出食物名', '三词以上'],
       },
     ],
     familyGuide: {
@@ -542,6 +702,30 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
         ask: '（什么都不用拿）听好：先站起来，再拍拍手。',
         hint: '「先站……再拍手」',
         checks: ['两步都做完', '顺序正确', '中间没等我再说一遍'],
+      },
+      {
+        id: 'G3-t5',
+        ask: '（什么都不用拿）听好：先关门，再坐下。',
+        hint: '「先关门……再坐下」',
+        checks: ['两步都做完', '顺序正确', '听完才开始动'],
+      },
+      {
+        id: 'G3-t6',
+        ask: '（桌上放{takePair}）听好：先摸一下{takePair.1}，再把{takePair.2}举起来。',
+        hint: '「先摸{takePair.1}……再举{takePair.2}」',
+        checks: ['两步都做完', '顺序正确', '没有只做第二步'],
+      },
+      {
+        id: 'G3-t7',
+        ask: '（什么都不用拿）听好：先拍拍腿，再摸摸头。',
+        hint: '「先拍腿……再摸头」',
+        checks: ['两步都做完', '顺序正确', '两个动作没混'],
+      },
+      {
+        id: 'G3-t8',
+        ask: '（吃点心前）听好：先擦手，再拿饼干。',
+        hint: '「先擦手……再拿饼干」',
+        checks: ['两步都做完', '顺序正确', '不用重复指令'],
       },
     ],
     familyGuide: {
@@ -642,6 +826,30 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
         hint: '「这是什么？」',
         checks: ['主动问 ≥1 次', '问的是「是什么」类', '问完等回答'],
       },
+      {
+        id: 'G4-t5',
+        ask: '（把{bag}举高，他自己拿不到，也不说话）',
+        hint: '「那是什么？」',
+        checks: ['主动提问', '问的时候看着你', '问完等你回答'],
+      },
+      {
+        id: 'G4-t6',
+        ask: '（出示两张图，一张是{picture}，一张是别的）哪一个是{picture}？',
+        hint: '指一下，再说「这个是」',
+        checks: ['指对', '能说出名称', '不用二选一提示'],
+      },
+      {
+        id: 'G4-t7',
+        ask: '（问功能）我们用什么东西喝水？',
+        hint: '「用杯子喝水」',
+        checks: ['答出物品', '用上「用」', '≥2 个功能类问题答对'],
+      },
+      {
+        id: 'G4-t8',
+        ask: '（问地点）我们睡觉在哪里？',
+        hint: '「在床上睡觉」',
+        checks: ['答出地点', '用上「在」', '≥2 个地点类问题答对'],
+      },
     ],
     familyGuide: {
       what: '先练答（什么/谁/在哪），再练问。问比答难，别一起上。',
@@ -733,6 +941,30 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
         hint: '「帮我打开」',
         checks: ['主动开口', '说清要什么', '等到回应再重复'],
       },
+      {
+        id: 'G5-t5',
+        ask: '（早上进门，你站在门口看着他，不说话）',
+        hint: '「老师早」',
+        checks: ['主动打招呼', '看着人', '音量能被听清'],
+      },
+      {
+        id: 'G5-t6',
+        ask: '（他正画画，你把笔收进盒子，放在他够得到的地方）',
+        hint: '「请给我笔」',
+        checks: ['说出请求', '用上「给我」或「请」', '不是直接抢'],
+      },
+      {
+        id: 'G5-t7',
+        ask: '（夹一筷子他不爱吃的菜，递到他嘴边）',
+        hint: '「我不要这个」',
+        checks: ['明确说「不要」', '没有扭头推开', '说完等你收走'],
+      },
+      {
+        id: 'G5-t8',
+        ask: '（他鞋带被系成死结，自己解不开）',
+        hint: '「帮我解开」',
+        checks: ['主动求助', '说清卡在哪', '没有直接放弃'],
+      },
     ],
     familyGuide: {
       what: '看四类语用能不能自己用出来：请求、拒绝、求助、打招呼，哪类还不能自发，就先集中补哪类。',
@@ -802,6 +1034,30 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
         ask: '周末你去哪了？跟谁去的？做了什么？',
         hint: '「我和妈妈去公园，玩了滑梯」',
         checks: ['有地点', '有同伴', '有事件'],
+      },
+      {
+        id: 'K1-t5',
+        ask: '（给他看刚才活动的照片或视频）你看，这是在做什么？',
+        hint: '「这是我在玩滑梯」',
+        checks: ['有「我」', '有动作', '有顺序词或「因为」'],
+      },
+      {
+        id: 'K1-t6',
+        ask: '今天最开心的一件事是什么？说给我听，从头说。',
+        hint: '「先是……然后……最后……」',
+        checks: ['有开头', '有经过', '有结尾'],
+      },
+      {
+        id: 'K1-t7',
+        ask: '（出示{story}）这几张图连起来讲一个故事，一张一张说。',
+        hint: '「第一张……后来……最后……」',
+        checks: ['每张都说到', '有连接词', '顺序对'],
+      },
+      {
+        id: 'K1-t8',
+        ask: '（讲一个他熟悉的故事开头，停住）后来怎么样了？你接着说。',
+        hint: '「后来小兔子……」',
+        checks: ['顺着情节接', '≥2 句', '不用提示'],
       },
     ],
     familyGuide: {
@@ -903,6 +1159,30 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
         hint: '「不要关，我还想看」',
         checks: ['说出「不要」', '补一句要求', '音量可听清'],
       },
+      {
+        id: 'K2-t5',
+        ask: '（要给他剪指甲或洗头，拿起工具靠近）',
+        hint: '「不要，我自己来」',
+        checks: ['说出「不要」', '没有直接跑开', '能补一句理由'],
+      },
+      {
+        id: 'K2-t6',
+        ask: '（借走他的橡皮／铅笔，一直不还）',
+        hint: '「还给我」',
+        checks: ['说出「还给我」', '看着你要', '说完等你给'],
+      },
+      {
+        id: 'K2-t7',
+        ask: '（他正玩的游戏，你说「时间到了，收起来」）',
+        hint: '「再玩一会儿」',
+        checks: ['说出「不要」或「再玩」', '给出一个具体请求', '没有哭闹'],
+      },
+      {
+        id: 'K2-t8',
+        ask: '（把他坐的椅子挪走，自己坐下）',
+        hint: '「这是我的座位」',
+        checks: ['说出「还给我」或「这是我的」', '语气坚定', '说完等你让开'],
+      },
     ],
     familyGuide: {
       what: '练「不想就要说出来」。这条比请求更容易起量，因为动机是现成的。',
@@ -1002,6 +1282,30 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
         hint: '「少了一块，帮我找」',
         checks: ['说出卡在哪', '主动求助', '没有直接放弃'],
       },
+      {
+        id: 'K3-t5',
+        ask: '（把他的书包拉链卡住，他自己拉不开）',
+        hint: '「拉链卡住了，帮我」',
+        checks: ['发现问题', '开口说明', '说清卡在哪'],
+      },
+      {
+        id: 'K3-t6',
+        ask: '（他做手工，胶带用完了／胶棒干了）',
+        hint: '「没有胶了，帮我拿」',
+        checks: ['主动开口', '说清缺什么', '没有自己翻柜子'],
+      },
+      {
+        id: 'K3-t7',
+        ask: '（给他一双系成死结的鞋，让他自己穿）',
+        hint: '「鞋带解不开，帮我」',
+        checks: ['试过一次才求助', '说出卡在哪', '语气平和'],
+      },
+      {
+        id: 'K3-t8',
+        ask: '（把水壶放在他够不到的架子上，他口渴了）',
+        hint: '「我够不到，帮我拿」',
+        checks: ['主动走过来', '说清要哪个', '没有自己搬椅子爬'],
+      },
     ],
     familyGuide: {
       what: '练「卡住了就找人」。关键是让他知道：求助比放弃和发脾气都快。',
@@ -1091,6 +1395,30 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
         hint: '「哪个班？今天怎么了？」',
         checks: ['记住并转达', '信息准确', '隔一会儿还能说'],
       },
+      {
+        id: 'K4-t5',
+        ask: '听好：明天穿运动鞋，不穿皮鞋。你说一遍。',
+        hint: '「明天穿什么？」',
+        checks: ['说出「运动鞋」', '说出「明天」', '说清不要什么'],
+      },
+      {
+        id: 'K4-t6',
+        ask: '听好：午饭在小房间吃，不在教室。你说一遍。',
+        hint: '「在哪吃？」',
+        checks: ['说出地点', '说清「不在教室」', '一次就记住'],
+      },
+      {
+        id: 'K4-t7',
+        ask: '听好：老师说明天下午三点半放学。你说一遍。',
+        hint: '「几点放学？」',
+        checks: ['说出时间', '说出「放学」', '不用重复'],
+      },
+      {
+        id: 'K4-t8',
+        ask: '听好这句话，等会儿说给妈妈听：把这张纸交给妈妈。',
+        hint: '「交给谁？交什么？」',
+        checks: ['记住并转达', '对象说对', '隔一会儿还能说'],
+      },
     ],
     familyGuide: {
       what: '练「听完记住再说出来」。一条只给 1-2 个信息，不要一次三句。',
@@ -1170,6 +1498,30 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
         ask: '（真打给一位熟悉的大人，说清一件事）',
         hint: '「先说是谁，再说要什么」',
         checks: ['真实情境能完成', '三要素齐', '对方听懂了'],
+      },
+      {
+        id: 'K5-t5',
+        ask: '（演：在商场找不到爸爸了，用{phone}打给爸爸）',
+        hint: '「爸爸，我是××，我在商场一楼」',
+        checks: ['说出自己是谁', '说出在哪', '说出要什么'],
+      },
+      {
+        id: 'K5-t6',
+        ask: '（演：老师让你打电话告诉妈妈，今天要带被子回家）',
+        hint: '「妈妈，老师说要带被子」',
+        checks: ['说清转达的事', '说出是谁让说的', '对方听懂了'],
+      },
+      {
+        id: 'K5-t7',
+        ask: '（演：你摔倒了，打给老师，说清在哪、怎么了）',
+        hint: '「老师，我在操场，我摔了」',
+        checks: ['说出地点', '说出发生了什么', '说出需要什么'],
+      },
+      {
+        id: 'K5-t8',
+        ask: '（演：到邻居家借一样东西，当面说清楚）',
+        hint: '「阿姨，我是××，我想借一把伞」',
+        checks: ['主动开口', '三要素齐', '说完道谢'],
       },
     ],
     familyGuide: {
