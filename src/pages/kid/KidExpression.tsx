@@ -1,9 +1,13 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  EXPRESSION_TARGETS_BY_DIFFICULTY,
+  EXPRESSION_STAGES,
+  EXPRESSION_TARGETS_BY_STAGE,
+  isStageBand,
+  stageGroups,
   suggestNextTarget,
   tierOf,
+  type ExpressionBand,
   type ExpressionTier,
   type ExpressionTarget,
 } from '@/config/expressionTargets';
@@ -25,12 +29,22 @@ import { useKid } from './KidContext';
 
 const STUDENT_KEY = 'kidbuddy.expression.student';
 const SUBJECT_KEY = 'kidbuddy.expression.by';
+const STAGE_KEY = 'kidbuddy.expression.stage';
 
 function readStudent(fallback: string): string {
   try {
     return localStorage.getItem(STUDENT_KEY) || fallback;
   } catch {
     return fallback;
+  }
+}
+
+function readStage(): ExpressionBand | 'all' {
+  try {
+    const raw = localStorage.getItem(STAGE_KEY);
+    return isStageBand(raw) ? raw : 'all';
+  } catch {
+    return 'all';
   }
 }
 
@@ -135,16 +149,27 @@ export default function KidExpression() {
   const [student, setStudent] = useState(() => readStudent(memory.nickname || '小朋友'));
   const [subject, setSubject] = useState<ExpressionSubject>(readSubject);
   const [exporting, setExporting] = useState<ExpressionSession | null>(null);
+  const [stage, setStage] = useState<ExpressionBand | 'all'>(readStage);
 
   const mine = sessionsOf(book, student);
-  const stableIds = EXPRESSION_TARGETS_BY_DIFFICULTY.filter(
+  const stableIds = EXPRESSION_TARGETS_BY_STAGE.filter(
     (t) => targetStat(book, student, t.id).status === 'stable',
   ).map((t) => t.id);
   const stableCount = stableIds.length;
-  const pendingCount = EXPRESSION_TARGETS_BY_DIFFICULTY.filter(
+  const pendingCount = EXPRESSION_TARGETS_BY_STAGE.filter(
     (t) => targetStat(book, student, t.id).status === 'pending',
   ).length;
   const nextTarget = suggestNextTarget(stableIds);
+  const groups = stageGroups(stage);
+
+  const changeStage = (value: ExpressionBand | 'all') => {
+    setStage(value);
+    try {
+      localStorage.setItem(STAGE_KEY, value);
+    } catch {
+      /* 忽略 */
+    }
+  };
 
   const changeStudent = (value: string) => {
     setStudent(value);
@@ -229,19 +254,57 @@ export default function KidExpression() {
           <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h2 className="text-xl font-extrabold text-slate-800">选一个目标开始练</h2>
             <span className="text-xs font-bold text-slate-400">
-              按 VB-MAPP 语言操作顺序由易到难（1 最容易），练稳一个再往下走
+              先按学段（B → G → K），学段内由易到难；练稳一个再往下走
             </span>
           </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {EXPRESSION_TARGETS_BY_DIFFICULTY.map((t, i) => (
-              <TargetCard
-                key={t.id}
-                target={t}
-                step={i + 1}
-                recommended={nextTarget?.id === t.id}
-                book={book}
-                student={student}
-              />
+
+          <div className="mb-4 flex flex-wrap gap-2" data-testid="expression-stage-filter">
+            {([
+              { key: 'all' as const, label: '全部学段' },
+              ...EXPRESSION_STAGES.map((s) => ({ key: s.band, label: `${s.ageLabel} ${s.code}` })),
+            ]).map((option) => {
+              const active = stage === option.key;
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  data-testid={`stage-filter-${option.key}`}
+                  aria-pressed={active}
+                  onClick={() => changeStage(option.key)}
+                  className={`h-12 rounded-full px-4 text-sm font-bold transition ${
+                    active ? 'bg-rose-500 text-white shadow-sm' : 'bg-white text-slate-500 shadow-sm'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="space-y-6">
+            {groups.map((group) => (
+              <div key={group.stage.band} data-testid={`stage-group-${group.stage.band}`}>
+                <div className="mb-2 flex flex-wrap items-baseline gap-2">
+                  <h3 className="text-sm font-extrabold text-slate-600">
+                    {group.stage.ageLabel} · {group.stage.domainLabel}
+                  </h3>
+                  <span className="text-xs font-bold text-slate-400">
+                    {group.stage.code} 段 · {group.targets.length} 个目标
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  {group.targets.map((t, i) => (
+                    <TargetCard
+                      key={t.id}
+                      target={t}
+                      step={i + 1}
+                      recommended={nextTarget?.id === t.id}
+                      book={book}
+                      student={student}
+                    />
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         </div>

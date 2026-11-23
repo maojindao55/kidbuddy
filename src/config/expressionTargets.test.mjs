@@ -89,7 +89,57 @@ const { EXPRESSION_TARGETS, EXPRESSION_TARGETS_BY_DIFFICULTY, targetsForBand, ti
   }
 }
 
-// ---- 下一个建议目标：台阶最靠前且未稳定的那个 ----
+// ---- 学段分组：先 B（0-3 岁）再 G（3-6 岁）再 K（6-12 岁），组内由易到难 ----
+{
+  const groups = mod.stageGroups('all');
+  assert.deepEqual(
+    groups.map((g) => g.stage.code),
+    ['B', 'G', 'K'],
+    '学段顺序必须是 B → G → K',
+  );
+  assert.deepEqual(groups.map((g) => g.targets.map((t) => t.id)), [
+    ['B5'],
+    ['G1', 'G2', 'G5', 'G4'],
+    ['K2', 'K3', 'K1', 'K4', 'K5'],
+  ]);
+  for (const g of groups) {
+    for (let i = 1; i < g.targets.length; i += 1) {
+      assert.ok(g.targets[i].difficulty > g.targets[i - 1].difficulty, `${g.stage.code} 段内顺序必须递增`);
+    }
+  }
+}
+
+// ---- 学前孩子打开时，K 段不会被夹在 B/G 中间 ----
+{
+  const order = mod.EXPRESSION_TARGETS_BY_STAGE.map((t) => t.id);
+  assert.deepEqual(order, ['B5', 'G1', 'G2', 'G5', 'G4', 'K2', 'K3', 'K1', 'K4', 'K5']);
+  const firstKSchool = order.findIndex((id) => id.startsWith('K'));
+  const lastGPreschool = order.map((id) => id.startsWith('G')).lastIndexOf(true);
+  assert.ok(firstKSchool > lastGPreschool, 'K 段必须整体排在 G 段之后');
+}
+
+// ---- 单个学段筛选：只返回该段，且顺序不乱 ----
+{
+  assert.deepEqual(mod.stageGroups('infant').map((g) => g.stage.band), ['infant']);
+  assert.deepEqual(mod.stageGroups('preschool').map((g) => g.targets.map((t) => t.id)), [['G1', 'G2', 'G5', 'G4']]);
+  assert.deepEqual(mod.stageGroups('school').map((g) => g.targets.map((t) => t.id)), [['K2', 'K3', 'K1', 'K4', 'K5']]);
+  assert.equal(mod.stageGroups('preschool').length, 1);
+}
+
+// ---- 学段顺序不能改动原数组 ----
+{
+  assert.notEqual(mod.EXPRESSION_TARGETS_BY_STAGE, mod.EXPRESSION_TARGETS);
+  assert.notEqual(mod.EXPRESSION_TARGETS_BY_STAGE, mod.EXPRESSION_TARGETS_BY_DIFFICULTY);
+  assert.equal(mod.EXPRESSION_TARGETS_BY_STAGE.length, 10);
+}
+
+// ---- 建议目标跟着学段顺序走：先把 B 段做完再看 G ----
+{
+  assert.equal(mod.suggestNextTarget(['B5']).id, 'G1');
+  assert.equal(mod.suggestNextTarget(['B5', 'G1', 'G2', 'G5', 'G4']).id, 'K2', 'G 段清完后才进 K 段');
+}
+
+
 {
   assert.equal(suggestNextTarget([]).id, 'B5', '一个都没稳定时从最容易的请求开始');
   assert.equal(suggestNextTarget(['B5']).id, 'G1');

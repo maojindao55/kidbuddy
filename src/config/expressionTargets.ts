@@ -693,14 +693,62 @@ export function tierOf(difficulty: number): ExpressionTier {
   return '挑战';
 }
 
-/** 由易到难排好的目标，界面上用这个，不要直接用 EXPRESSION_TARGETS */
+/** 学段：和 skill 的代码段一一对应，B 段 0-3 岁、G 段 3-6 岁、K 段 6-12 岁 */
+export interface ExpressionStage {
+  band: ExpressionBand;
+  /** 代码段首字母，卡片上的编号用它 */
+  code: 'B' | 'G' | 'K';
+  ageLabel: string;
+  domainLabel: string;
+  /** 学段先后，数字小的先显示 */
+  rank: number;
+}
+
+export const EXPRESSION_STAGES: ExpressionStage[] = [
+  { band: 'infant', code: 'B', ageLabel: '0-3 岁', domainLabel: '语言沟通', rank: 0 },
+  { band: 'preschool', code: 'G', ageLabel: '3-6 岁', domainLabel: '语言沟通', rank: 1 },
+  { band: 'school', code: 'K', ageLabel: '6-12 岁', domainLabel: '语言表达', rank: 2 },
+];
+
+export function getStage(band: ExpressionBand): ExpressionStage {
+  return EXPRESSION_STAGES.find((s) => s.band === band) ?? EXPRESSION_STAGES[1];
+}
+
+export function isStageBand(value: unknown): value is ExpressionBand {
+  return EXPRESSION_STAGES.some((s) => s.band === value);
+}
+
+/** 只按难度排：用来看「全局哪条更容易」，不建议直接铺在界面上 */
 export const EXPRESSION_TARGETS_BY_DIFFICULTY: ExpressionTarget[] = EXPRESSION_TARGETS.slice().sort(
   (a, b) => a.difficulty - b.difficulty,
 );
 
-/** 建议下一个练的目标：台阶最靠前、还没稳定的那个 */
+/**
+ * 界面上的正式顺序：先学段（B → G → K），学段内再由易到难。
+ * 学前孩子打开时先看到 B/G，K 段排在后面，不会被夹在中间。
+ */
+export const EXPRESSION_TARGETS_BY_STAGE: ExpressionTarget[] = EXPRESSION_TARGETS.slice().sort(
+  (a, b) => getStage(a.band).rank - getStage(b.band).rank || a.difficulty - b.difficulty,
+);
+
+export interface ExpressionStageGroup {
+  stage: ExpressionStage;
+  targets: ExpressionTarget[];
+}
+
+/** 按学段分组；传 'all' 或具体学段 */
+export function stageGroups(only: ExpressionBand | 'all' = 'all'): ExpressionStageGroup[] {
+  return EXPRESSION_STAGES.filter((s) => only === 'all' || s.band === only)
+    .map((stage) => ({
+      stage,
+      targets: EXPRESSION_TARGETS_BY_STAGE.filter((t) => t.band === stage.band),
+    }))
+    .filter((g) => g.targets.length > 0);
+}
+
+/** 建议下一个练的目标：学段最靠前、学段内最容易、还没稳定的那个 */
 export function suggestNextTarget(stableIds: string[]): ExpressionTarget | undefined {
-  return EXPRESSION_TARGETS_BY_DIFFICULTY.find((t) => !stableIds.includes(t.id));
+  return EXPRESSION_TARGETS_BY_STAGE.find((t) => !stableIds.includes(t.id));
 }
 
 export function getExpressionTarget(id: string | undefined): ExpressionTarget | undefined {
@@ -709,5 +757,5 @@ export function getExpressionTarget(id: string | undefined): ExpressionTarget | 
 }
 
 export function targetsForBand(band: ExpressionBand): ExpressionTarget[] {
-  return EXPRESSION_TARGETS_BY_DIFFICULTY.filter((t) => t.band === band);
+  return EXPRESSION_TARGETS_BY_STAGE.filter((t) => t.band === band);
 }
