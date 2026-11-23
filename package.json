@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "test": "node scripts/run-tests.mjs",
     "test:llm": "node src/utils/llmClient.test.mjs && node src/utils/markdownContent.test.mjs",
     "test:product": "node src/config/aiMembers.test.mjs && node src/config/ageProfile.test.mjs && node src/config/kidCompanion.test.mjs && node src/config/kidLocalState.test.mjs && node src/config/tokenPlan.test.mjs && node src/config/kidArt.test.mjs && node src/config/kidEnglish.test.mjs",

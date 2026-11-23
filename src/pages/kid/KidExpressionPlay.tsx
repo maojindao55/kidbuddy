@@ -1,10 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import {
   MODALITY_LABEL,
+  fillSlots,
   getExpressionTarget,
+  materialLine,
+  resolvePicks,
   type ExpressionTarget,
   type ExpressionTask,
+  type MaterialSlot,
 } from '@/config/expressionTargets';
 import {
   DTT_OUTCOME_LABEL,
@@ -62,6 +66,40 @@ const COACH: KidCompanion = {
 
 const STUDENT_KEY = 'kidbuddy.expression.student';
 const SUBJECT_KEY = 'kidbuddy.expression.by';
+const MATERIAL_KEY = 'kidbuddy.expression.materials';
+
+/** 按目标记住上次选的教具，换个教室不用重新选 */
+function readPicks(targetId: string): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(MATERIAL_KEY);
+    if (!raw) return {};
+    const all = JSON.parse(raw) as Record<string, Record<string, string>>;
+    return all[targetId] ?? {};
+  } catch {
+    return {};
+  }
+}
+
+function writePicks(targetId: string, picks: Record<string, string>): void {
+  try {
+    const raw = localStorage.getItem(MATERIAL_KEY);
+    const all = raw ? (JSON.parse(raw) as Record<string, Record<string, string>>) : {};
+    all[targetId] = picks;
+    localStorage.setItem(MATERIAL_KEY, JSON.stringify(all));
+  } catch {
+    // 存不进去不影响这节课，下次重新选一遍
+  }
+}
+
+/** 把题干、提示、判定项里的 {key} 一次性换成今天实际用的教具 */
+function fillTasks(tasks: ExpressionTask[], materials: MaterialSlot[], picks: Record<string, string>): ExpressionTask[] {
+  return tasks.map((task) => ({
+    ...task,
+    ask: fillSlots(task.ask, materials, picks),
+    hint: fillSlots(task.hint, materials, picks),
+    checks: task.checks.map((c) => fillSlots(c, materials, picks)),
+  }));
+}
 
 function readStudent(fallback: string): string {
   try {
@@ -119,6 +157,8 @@ function makeRound(spec: TrialSpec, tasks: ExpressionTask[]): ExpressionRound {
 }
 
 function outcomeMark(round: ExpressionRound): { text: string; tone: string } {
+  // 跳过要先判：它没有 outcome，落到最后会显示成「未判定」，容易被误当成漏做
+  if (round.skipped) return { text: '已跳过（不计分）', tone: 'bg-slate-100 text-slate-500' };
   if (round.outcome === 'correct') {
     return round.promptLevel === 'independent'
       ? { text: '独立正确', tone: 'bg-emerald-100 text-emerald-700' }
@@ -147,7 +187,9 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
   const listRef = useRef<HTMLDivElement>(null);
   const startedRef = useRef(false);
 
-  const tasks = target.tasks;
+  const [picks, setPicks] = useState<Record<string, string>>(() => resolvePicks(target.materials, readPicks(target.id)));
+  const [showMaterials, setShowMaterials] = useState(true);
+  const tasks = useMemo(() => fillTasks(target.tasks, target.materials, picks), [target, picks]);
   const [repeats, setRepeats] = useState(2);
   const [trials, setTrials] = useState<TrialSpec[]>(() => buildTrials(tasks, 2));
   const [rounds, setRounds] = useState<ExpressionRound[]>(() => buildTrials(tasks, 2).map((s) => makeRound(s, tasks)));
@@ -178,8 +220,7 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
 
   const spec = trials[Math.min(idx, trials.length - 1)];
   const currentTask = tasks[spec.taskIndex];
-  const stats = computeDttStats(rounds.map((r) => ({ outcome: r.outcome ?? null, promptLevel: r.promptLevel ?? null })));
-  const locked = rounds.some((r) => r.achievement !== null);
+  const stats = computeDttStats(rounds.filter((r) => !r.skipped).map((r) => ({ outcome: r.outcome ?? null, promptLevel: r.promptLevel ?? null })));
 
   const pushCoach = useCallback(
     (text: string) => {
@@ -231,16 +272,47 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
     if (!threeDirty) setThree(composeThreeLines({ rounds: next, targetId: target.id, by }, target));
   };
 
+  /**
+   * 改每道题的遍数：已判定和已跳过的试次原样保留，只重建没做过的部分。
+   * 之前这里是整节课清空重来——孩子状态好想多练两轮，代价是把已做的记录全丢了。
+   */
   const changeRepeats = (value: number) => {
-    if (locked) return;
     setRepeats(value);
     const nextTrials = buildTrials(tasks, value);
+    const kept = new Map(roundsRef.current.filter((r) => r.achievement !== null || r.skipped).map((r) => [r.taskId, r]));
+    const nextRounds = nextTrials.map((s) => kept.get(s.key) ?? makeRound(s, tasks));
     setTrials(nextTrials);
-    const nextRounds = nextTrials.map((s) => makeRound(s, tasks));
     persistRounds(nextRounds);
-    setIdx(0);
-    setLines([]);
-    startTrial(nextTrials[0]);
+    const firstOpen = nextRounds.findIndex((r) => r.achievement === null && !r.skipped);
+    const nextIdx = firstOpen === -1 ? nextRounds.length - 1 : firstOpen;
+    setIdx(nextIdx);
+    startTrial(nextTrials[nextIdx]);
+  };
+
+  /**
+   * 换教具：只重建还没做的试次，已经判定的保持当时的题干不动——
+   * 记录要反映当时真实用的东西，不能被后来的替换改掉。
+   */
+  const changeMaterial = (slotKey: string, name: string) => {
+    const nextPicks = { ...picks, [slotKey]: name };
+    setPicks(nextPicks);
+    writePicks(target.id, nextPicks);
+    const nextTasks = fillTasks(target.tasks, target.materials, nextPicks);
+    const nextRounds = trials.map((s, i) => {
+      const old = roundsRef.current[i];
+      if (old && (old.achievement !== null || old.skipped)) return old;
+      return makeRound(s, nextTasks);
+    });
+    persistRounds(nextRounds);
+    const current = nextRounds[idx];
+    if (current && current.achievement === null && !current.skipped) {
+      pushCoach(`换成「${name}」，我们重新来：第 ${spec.repeatIndex} 遍：${nextTasks[spec.taskIndex].ask}`);
+      setTrialStage('await');
+      setWaitExpired(false);
+      setShowPromptPicker(false);
+      setAnswerDraft('');
+      setTrialSeq((n) => n + 1);
+    }
   };
 
   /** 孩子说完了：先把原话记下来，进入待判定 */
@@ -285,6 +357,17 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
     const nextIdx = idx + 1;
     setIdx(nextIdx);
     startTrial(trials[nextIdx]);
+  };
+
+  /**
+   * 这题先跳过：教具凑不出来、孩子这会儿不配合、场地做不了。
+   * 记 skipped 而不是「没做到」，后面所有统计都排除它，分数不会被凭空拉低。
+   */
+  const skipCurrent = () => {
+    const next = roundsRef.current.map((r, i) => (i === idx ? { ...r, skipped: true, achievement: null, outcome: null } : r));
+    persistRounds(next);
+    pushCoach('这题先跳过，我们换下一个。');
+    advance();
   };
 
   /** 同一道题再来一遍：在当前试次后面插一个同题试次 */
@@ -343,6 +426,7 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
       threeLines: three,
       highlight,
       nextStep,
+      materials: picks,
       createdAt: Date.now(),
     };
     addSession(book, session);
@@ -359,8 +443,9 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
           <div className="rounded-[28px] bg-gradient-to-r from-rose-400 to-orange-400 p-5 text-white shadow-lg">
             <h1 className="text-2xl font-extrabold">填写这节课的记录</h1>
             <p className="mt-1 text-sm opacity-95">
-              {target.id} {target.name} · DTT 已判定 {stats.total}/{rounds.length} 试次 · 独立正确 {stats.independentCorrect}（
-              {Math.round(stats.independentRate * 100)}%）· 最长连续独立 {stats.maxIndependentStreak} 次
+              {target.id} {target.name} · DTT 已判定 {stats.total}/{rounds.filter((r) => !r.skipped).length} 试次
+              {rounds.some((r) => r.skipped) ? `（跳过 ${rounds.filter((r) => r.skipped).length} 题不计分）` : ''} · 独立正确{' '}
+              {stats.independentCorrect}（{Math.round(stats.independentRate * 100)}%）· 最长连续独立 {stats.maxIndependentStreak} 次
             </p>
           </div>
 
@@ -642,6 +727,49 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
       <div className="grid min-h-0 flex-1 gap-4 px-4 pb-2 lg:grid-cols-2">
         {/* 左：DTT 操作台 */}
         <div className="flex min-h-0 flex-col gap-3 overflow-y-auto rounded-[32px] bg-white p-4 shadow-md">
+          {/* 教具：上课前选一次，全课题干自动替换，不用现场改词 */}
+          {target.materials.length > 0 && (
+            <div className="rounded-2xl bg-sky-50 px-3 py-2" data-testid="material-picker">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs font-bold text-sky-700">今天用什么教具</span>
+                <button
+                  type="button"
+                  onClick={() => setShowMaterials((v) => !v)}
+                  data-testid="material-toggle"
+                  className="h-12 px-2 text-xs font-bold text-sky-600 underline"
+                >
+                  {showMaterials ? '收起' : '展开'}
+                </button>
+              </div>
+              {showMaterials ? (
+                target.materials.map((slot) => (
+                  <div key={slot.key} className="mt-2">
+                    <div className="text-[11px] font-bold text-slate-500">{slot.label}</div>
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {slot.options.map((opt) => (
+                        <button
+                          key={opt.name}
+                          type="button"
+                          onClick={() => changeMaterial(slot.key, opt.name)}
+                          data-testid={`material-${slot.key}-${opt.name}`}
+                          title={opt.note ?? ''}
+                          className={`h-12 rounded-full px-3 text-xs font-bold ${
+                            picks[slot.key] === opt.name ? 'bg-sky-500 text-white' : 'bg-white text-slate-600 shadow-sm'
+                          }`}
+                        >
+                          {opt.name}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-1 text-[11px] leading-snug text-slate-400">都没有？{slot.fallback}</div>
+                  </div>
+                ))
+              ) : (
+                <div className="mt-1 truncate text-xs font-bold text-slate-500">{materialLine(target.materials, picks)}</div>
+              )}
+            </div>
+          )}
+
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-rose-50 px-3 py-2">
             <span className="text-xs font-bold text-rose-600">每道题练几遍</span>
             <div className="flex overflow-hidden rounded-xl border-2 border-rose-200">
@@ -650,10 +778,9 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
                   key={n}
                   type="button"
                   onClick={() => changeRepeats(n)}
-                  disabled={locked}
                   data-testid={`repeats-${n}`}
                   className={`h-12 px-4 text-sm font-bold ${
-                    repeats === n ? 'bg-rose-500 text-white' : locked ? 'bg-white text-slate-300' : 'bg-white text-slate-500'
+                    repeats === n ? 'bg-rose-500 text-white' : 'bg-white text-slate-500'
                   }`}
                 >
                   {n} 遍
@@ -698,6 +825,14 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
                   🔊 再说一遍指令
                 </button>
               )}
+              <button
+                type="button"
+                onClick={skipCurrent}
+                data-testid="skip-trial"
+                className="flex h-12 flex-1 items-center justify-center rounded-xl border-2 border-slate-300 bg-white px-3 text-sm font-bold text-slate-600"
+              >
+                这题跳过 →
+              </button>
               <button
                 type="button"
                 onClick={enterReview}
@@ -796,16 +931,22 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
                 {feedbackCorrect ? '结果出现要立刻给，超过 2 秒就不算即时强化了。' : '不批评、不追问原因，退回上一级辅助重来。'}
               </div>
               <div className="mt-2.5 flex flex-wrap gap-2">
-                {!feedbackCorrect && (
-                  <button
-                    type="button"
-                    onClick={retry}
-                    data-testid="dtt-retry"
-                    className="flex h-12 flex-1 items-center justify-center rounded-xl bg-white text-sm font-bold text-slate-700 shadow-sm"
-                  >
-                    🔁 同一道题再来一遍
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={retry}
+                  data-testid="dtt-retry"
+                  className="flex h-12 flex-1 items-center justify-center rounded-xl bg-white text-sm font-bold text-slate-700 shadow-sm"
+                >
+                  {feedbackCorrect ? '🔁 再做一遍巩固' : '🔁 同一道题再来一遍'}
+                </button>
+                <button
+                  type="button"
+                  onClick={skipCurrent}
+                  data-testid="skip-trial-feedback"
+                  className="flex h-12 items-center justify-center rounded-xl border-2 border-slate-200 bg-white px-3 text-sm font-bold text-slate-500"
+                >
+                  跳过
+                </button>
                 <button
                   type="button"
                   onClick={advance}

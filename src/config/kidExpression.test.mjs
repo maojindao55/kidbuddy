@@ -280,4 +280,49 @@ const session = (over) => ({
   assert.match(three.stuck, /等 3 秒无反应/);
 }
 
+// ---- 跳过的题不能算进分数：它没有 outcome，掉进统计里就会变成「没做到」 ----
+{
+  const meta = { taskId: 'x', ask: '题', hint: 'h', checks: [], checksHit: [], answer: '' };
+  const made = [
+    { ...meta, taskId: 'a', achievement: 'independent', outcome: 'correct', promptLevel: 'independent' },
+    { ...meta, taskId: 'b', achievement: 'independent', outcome: 'correct', promptLevel: 'independent' },
+    { ...meta, taskId: 'c', skipped: true, achievement: null, outcome: undefined },
+    { ...meta, taskId: 'd', skipped: true, achievement: null, outcome: undefined },
+  ];
+
+  // 只该看前两条：2/2 独立 → 2 分；把跳过算进去会掉到 50% 变 1 分
+  assert.equal(mod.suggestScore(made), 2, '跳过的题不能拉低得分');
+
+  const counted = mod.countAchievements(made);
+  assert.equal(counted.independent, 2, '计数要排除跳过');
+  assert.equal(counted.failed, 0, '跳过不能被算成没做到');
+
+  const three = mod.composeThreeLines({ rounds: made, targetId: 'K4', by: '教师' }, targets.getExpressionTarget('K4'));
+  assert.match(three.did, /当场跳过 2 题不计分/, '三行记录要注明跳过了几题');
+  assert.match(three.achieved, /错误 0、无反应 0/, '跳过不能被计成错误或无反应');
+  assert.match(three.achieved, /独立正确 2（100%）/, '分母要排除跳过的题');
+
+  const md = mod.buildSessionMarkdown({
+    id: 's',
+    student: '小明',
+    date: '2026-11-24',
+    sessionNo: 1,
+    topic: '复述通知',
+    targetId: 'K4',
+    by: '教师',
+    rounds: made,
+    score: 2,
+    threeLines: three,
+    highlight: '',
+    nextStep: '继续',
+    materials: {},
+    createdAt: Date.now(),
+  });
+  assert.match(md, /另有 2 题当场跳过/, '导出的记录要写明跳过数量');
+
+  // 全跳过 = 没有可判定的试次，不能瞎给分
+  const allSkipped = made.map((r) => ({ ...r, skipped: true, achievement: null, outcome: undefined }));
+  assert.equal(mod.suggestScore(allSkipped), null, '一题没判就返回 null，不能给 0 分');
+}
+
 console.log('PASS kidExpression');

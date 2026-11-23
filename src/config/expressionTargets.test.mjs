@@ -228,3 +228,65 @@ const { EXPRESSION_TARGETS, EXPRESSION_TARGETS_BY_DIFFICULTY, targetsForBand, ti
     }
   }
 }
+
+// ---- 教具槽位：题干里出现的每一个 {key} 都必须有定义，否则现场会念出「{item}」 ----
+{
+  const { fillSlots, placeholderKeys, resolvePicks } = mod;
+  for (const t of EXPRESSION_TARGETS_BY_DIFFICULTY) {
+    assert.ok(Array.isArray(t.materials), `${t.id} 缺 materials 字段（没有教具也要给空数组）`);
+    const defined = new Set(t.materials.map((s) => s.key));
+    assert.equal(defined.size, t.materials.length, `${t.id} 的教具槽位 key 重复`);
+
+    for (const slot of t.materials) {
+      assert.ok(slot.label && slot.label.length > 1, `${t.id}/${slot.key} 缺 label`);
+      assert.ok(slot.options.length >= 2, `${t.id}/${slot.key} 至少要有 2 个等价替代，否则等于写死`);
+      assert.ok(slot.fallback && slot.fallback.length > 6, `${t.id}/${slot.key} 缺「都没有怎么办」`);
+    }
+
+    for (const task of t.tasks) {
+      const text = [task.ask, task.hint, ...task.checks].join(' ');
+      for (const key of placeholderKeys(text)) {
+        assert.ok(defined.has(key), `${task.id} 引用了没定义的教具占位 {${key}}`);
+      }
+      // 全部替换后不能再残留 {xxx}
+      const filled = fillSlots(text, t.materials, {});
+      assert.doesNotMatch(filled, /\{[a-zA-Z][\w.]*\}/, `${task.id} 有占位没被替换掉：${filled}`);
+    }
+  }
+}
+
+// ---- 填充函数：{key} / {key.word} / {key.1} 三种写法都要能换对 ----
+{
+  const { fillSlots } = mod;
+  const slots = [
+    {
+      key: 'item',
+      label: '东西',
+      fallback: '随便一样',
+      options: [
+        { name: '泡泡水', word: '泡泡' },
+        { name: '饼干罐', word: '饼干' },
+      ],
+    },
+    {
+      key: 'pair',
+      label: '两样',
+      fallback: '随便两样',
+      options: [
+        { name: '杯子和积木', parts: ['杯子', '积木'] },
+        { name: '碗和勺子', parts: ['碗', '勺子'] },
+      ],
+    },
+  ];
+  assert.equal(fillSlots('把{item}举起来', slots), '把泡泡水举起来', '默认取第一项');
+  assert.equal(fillSlots('把{item}举起来', slots, { item: '饼干罐' }), '把饼干罐举起来', '选择要生效');
+  assert.equal(fillSlots('说「{item.word}」', slots, { item: '饼干罐' }), '说「饼干」', '.word 要换成孩子说的词');
+  assert.equal(fillSlots('先拿{pair.1}，再拿{pair.2}', slots), '先拿杯子，再拿积木', '.1/.2 要拆出组件');
+  assert.equal(
+    fillSlots('先拿{pair.1}', slots, { pair: '碗和勺子' }),
+    '先拿碗',
+    '换一组后 .1 要跟着变',
+  );
+  // 传了不存在的名字要退回默认，不能让题干空掉
+  assert.equal(fillSlots('把{item}举起来', slots, { item: '不存在的' }), '把泡泡水举起来', '非法选择退回默认');
+}

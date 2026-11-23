@@ -103,5 +103,17 @@ assert.doesNotMatch(exprHome, /\/\s*10\b/, '台阶总数不能写死，要用 EX
 const exprPlay = await read('./KidExpressionPlay.tsx');
 assert.match(exprPlay, /MODALITY_LABEL/, '练习页也要显示听/说标记');
 assert.match(exprPlay, /modality === 'receptive'/, '听者反应类目标要有「看动作不要求开口」的说明');
+// 教具不能写死在题干里：一律走 fillSlots 替换，且选择要记住
+assert.match(exprPlay, /fillSlots/, '题干必须经过教具槽位替换');
+assert.match(exprPlay, /material-picker/, '练习页要能选今天的教具');
+assert.match(exprPlay, /kidbuddy\.expression\.materials/, '教具选择要记住，换课不用重选');
+assert.match(exprPlay, /materials: picks/, '记录里要存下实际用的教具');
+// 题量控制：跳过不计分，且改遍数不能把已判定的试次清掉
+assert.match(exprPlay, /skipCurrent/, '要有单题跳过');
+assert.match(exprPlay, /skip-trial/, '跳过按钮要可点');
+assert.match(exprPlay, /skipped: true/, '跳过要写进记录，不能只是界面消失');
+assert.doesNotMatch(exprPlay, /setIdx\(0\);\s*setLines\(\[\]\);/, '改遍数不允许整节课清空重来');
+// 反馈页不管对错都要能再练一遍
+assert.doesNotMatch(exprPlay, /\{!feedbackCorrect && \(\s*<button/, '答对也要能加练一遍');
 
 console.log('kidUi.test.mjs: ok');

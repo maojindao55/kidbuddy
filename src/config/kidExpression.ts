@@ -8,8 +8,8 @@
  *
  * 零外部运行时依赖（仅 localStorage），便于 node 直接 transpile 单测。
  */
-import { EXPRESSION_TARGETS, getExpressionTarget, type ExpressionTarget } from './expressionTargets';
-import { computeDttStats, type DttOutcome, type DttPromptLevel, type DttTrial } from './dtt';
+import { getExpressionTarget, materialLine, type ExpressionTarget } from './expressionTargets';
+import { computeDttStats, type DttOutcome, type DttPromptLevel } from './dtt';
 
 export type ExpressionSubject = '教师' | '家长';
 export type Achievement = 'independent' | 'prompted' | 'failed';
@@ -31,6 +31,11 @@ export interface ExpressionRound {
   promptLevel?: DttPromptLevel | null;
   /** DTT：同一道题的第几遍（从 1 开始） */
   repeatIndex?: number;
+  /**
+   * 这一题当场跳过了（没条件做、孩子不配合、教具不在）。
+   * 跳过不等于「没做到」，所有统计都要把它排除，否则分数会被凭空拉低。
+   */
+  skipped?: boolean;
 }
 
 export interface ExpressionSession {
@@ -50,6 +55,8 @@ export interface ExpressionSession {
   highlight: string;
   /** 下次调整 / 下次课调整 */
   nextStep: string;
+  /** 这节课实际用的教具（槽位 → 实际物品），换教室、换老师时用来判断可比性 */
+  materials?: Record<string, string>;
   createdAt: number;
 }
 
@@ -171,8 +178,13 @@ export function sessionsOf(book: ExpressionBook, student: string): ExpressionSes
 }
 
 /** 按 0/1/2 的达成率给建议分：≥80% 记 2，≥50% 记 1，其余记 0；未判定返回 null */
+/** 参与统计的试次：跳过的不算，没判定的不算，否则跳过会被误算成「没做到」 */
+export function scoredRounds(rounds: ExpressionRound[]): ExpressionRound[] {
+  return rounds.filter((r) => !r.skipped && r.achievement !== null);
+}
+
 export function suggestScore(rounds: ExpressionRound[]): Score | null {
-  const judged = rounds.filter((r) => r.achievement !== null);
+  const judged = scoredRounds(rounds);
   if (judged.length === 0) return null;
   const independent = judged.filter((r) => r.achievement === 'independent').length;
   const ratio = independent / judged.length;
@@ -184,7 +196,7 @@ export function suggestScore(rounds: ExpressionRound[]): Score | null {
 export function countAchievements(rounds: ExpressionRound[]): Record<Achievement, number> {
   return rounds.reduce<Record<Achievement, number>>(
     (acc, r) => {
-      if (r.achievement) acc[r.achievement] += 1;
+      if (!r.skipped && r.achievement) acc[r.achievement] += 1;
       return acc;
     },
     { independent: 0, prompted: 0, failed: 0 },
@@ -252,25 +264,28 @@ export function composeThreeLines(
   session: Pick<ExpressionSession, 'rounds' | 'targetId' | 'by'>,
   target: ExpressionTarget,
 ): { did: string; achieved: string; stuck: string } {
-  const total = session.rounds.length;
-  const judgedRounds = session.rounds.filter((r) => r.achievement !== null);
+  const countedRounds = session.rounds.filter((r) => !r.skipped);
+  const total = countedRounds.length;
+  const skipped = session.rounds.length - total;
+  const judgedRounds = scoredRounds(session.rounds);
   const judged = judgedRounds.length;
-  const hasDtt = session.rounds.some((r) => r.outcome);
+  const hasDtt = countedRounds.some((r) => r.outcome);
   const counted = countAchievements(session.rounds);
 
-  const uniqueAsks = Array.from(new Set(session.rounds.map((r) => r.ask.replace(/[。？]$/, ''))));
+  const uniqueAsks = Array.from(new Set(countedRounds.map((r) => r.ask.replace(/[。？]$/, ''))));
+  const skipNote = skipped > 0 ? `、当场跳过 ${skipped} 题不计分` : '';
 
   const tag = `${target.id} ${target.name}（VB-MAPP ${target.vbMapp.tag}）`;
   const did =
     judged === 0
-      ? `${tag}，DTT 计划 ${total} 试次，本节没有判定。`
-      : `${tag}，DTT 计划 ${total} 试次、已判定 ${judged} 试次；题目：${uniqueAsks.join('／')}。`;
+      ? `${tag}，DTT 计划 ${total} 试次${skipNote}，本节没有判定。`
+      : `${tag}，DTT 计划 ${total} 试次${skipNote}、已判定 ${judged} 试次；题目：${uniqueAsks.join('／')}。`;
 
   let achieved: string;
   if (judged === 0) {
     achieved = '本节未判定，按 DTT 口径不打分。';
   } else if (hasDtt) {
-    const stats = computeDttStats(session.rounds.map((r) => ({ outcome: r.outcome ?? null, promptLevel: r.promptLevel ?? null })));
+    const stats = computeDttStats(judgedRounds.map((r) => ({ outcome: r.outcome ?? null, promptLevel: r.promptLevel ?? null })));
     achieved = `${judged} 试次中：独立正确 ${stats.independentCorrect}（${Math.round(stats.independentRate * 100)}%）、口头提示后正确 ${
       stats.correctByPrompt.verbal
     }、示范后正确 ${stats.correctByPrompt.model}、手把手后正确 ${stats.correctByPrompt.physical}、错误 ${stats.incorrect}、无反应 ${
@@ -295,11 +310,12 @@ export function composeThreeLines(
   return { did, achieved, stuck };
 }
 
-/** 家长版导语：取第一句独立完成的原话，没有就取最长的一句 */
+/** 家长版导语：取第一句独立完成的原话，没有就取最长的一句；跳过的题不进导语 */
 export function pickHighlight(rounds: ExpressionRound[]): string {
-  const independent = rounds.find((r) => r.achievement === 'independent' && r.answer.trim());
+  const used = rounds.filter((r) => !r.skipped);
+  const independent = used.find((r) => r.achievement === 'independent' && r.answer.trim());
   if (independent) return independent.answer.trim();
-  const longest = rounds
+  const longest = used
     .filter((r) => r.answer.trim())
     .sort((a, b) => b.answer.length - a.answer.length)[0];
   return longest ? longest.answer.trim() : '';
@@ -311,20 +327,25 @@ export function sessionFileName(session: Pick<ExpressionSession, 'student' | 'da
 }
 
 function achievementEvidence(rounds: ExpressionRound[]): string {
-  const hasDtt = rounds.some((r) => r.outcome);
+  const used = rounds.filter((r) => !r.skipped);
+  const skipped = rounds.length - used.length;
+  const skipNote = skipped > 0 ? `　（另有 ${skipped} 题当场跳过，未计入）` : '';
+  const hasDtt = used.some((r) => r.outcome);
   if (!hasDtt) {
-    return rounds
-      .map((r, i) => {
-        const verdict = r.achievement ? ACHIEVEMENT_LABEL[r.achievement] : '未判定';
-        const hit = r.checksHit.length > 0 ? `，要素命中：${r.checksHit.join('、')}` : '';
-        const answer = r.answer.trim() ? `原话「${r.answer.trim()}」` : '未作答';
-        return `第${i + 1}轮（${verdict}${hit}）：${answer}`;
-      })
-      .join('；');
+    return (
+      used
+        .map((r, i) => {
+          const verdict = r.achievement ? ACHIEVEMENT_LABEL[r.achievement] : '未判定';
+          const hit = r.checksHit.length > 0 ? `，要素命中：${r.checksHit.join('、')}` : '';
+          const answer = r.answer.trim() ? `原话「${r.answer.trim()}」` : '未作答';
+          return `第${i + 1}轮（${verdict}${hit}）：${answer}`;
+        })
+        .join('；') + skipNote
+    );
   }
 
-  const stats = computeDttStats(rounds.map((r) => ({ outcome: r.outcome ?? null, promptLevel: r.promptLevel ?? null })));
-  const chain = rounds
+  const stats = computeDttStats(used.map((r) => ({ outcome: r.outcome ?? null, promptLevel: r.promptLevel ?? null })));
+  const chain = used
     .map((r, i) => {
       const mark =
         r.outcome === 'correct'
@@ -344,7 +365,7 @@ function achievementEvidence(rounds: ExpressionRound[]): string {
   }、手把手后 ${stats.correctByPrompt.physical}、错误 ${stats.incorrect}、无反应 ${stats.noResponse}；独立正确率 ${Math.round(
     stats.independentRate * 100,
   )}%；最长连续独立正确 ${stats.maxIndependentStreak} 次`;
-  return `${summary}。逐试次：${chain}`;
+  return `${summary}。逐试次：${chain}${skipNote}`;
 }
 
 function promptShort(level: DttPromptLevel | null | undefined): string {
@@ -399,6 +420,10 @@ export function buildSessionMarkdown(session: ExpressionSession): string {
   lines.push('');
   lines.push(`**目标**：${session.targetId} ${name}　**授课**：${session.by}　**得分**：${scoreText}`);
   lines.push('');
+  if (target) {
+    lines.push(`**本次教具**：${materialLine(target.materials, session.materials ?? {})}`);
+    lines.push('');
+  }
   lines.push('**课堂记录（三行）**');
   lines.push('');
   lines.push(`- **今天做了什么**：${session.threeLines.did}`);

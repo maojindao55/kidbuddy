@@ -26,3 +26,7 @@ src-tauri/target/
 *.sln
 *.sw?
 .qoder/*
+
+# macOS 在外置 exFAT/NTFS 盘上生成的 AppleDouble 元数据，不是源码
+._*
+tsconfig.node.tsbuildinfo

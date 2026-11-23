@@ -52,15 +52,91 @@ export function isReceptive(target: { modality: ExpressionModality }): boolean {
   return target.modality === 'receptive';
 }
 
+/**
+ * 教具槽位：题干里的 `{key}` 换成老师实际拿在手上的东西。
+ *
+ * 为什么要这么绕一层——教室里不一定有「泡泡水」「三格图片故事」，
+ * 把具体物品写死在题干里，老师只能照念一件不存在的东西，或者现场改词，
+ * 一改就冒出歧义（改成「摇铃」还是「小鼓」？孩子要说的词也跟着变）。
+ * 所以题干只写「把{容器}举到他面前」，具体是饼干罐还是泡泡水，上课前选一次，
+ * 全课题干自动替换，记录里也存下这次实际用的教具，方便不同老师之间横向比较。
+ */
+export interface MaterialOption {
+  /** 实际拿在手上的东西 */
+  name: string;
+  /** 孩子要说出的词。和 name 不一样时填，如 name「泡泡水」而 word「泡泡」；不填就用 name */
+  word?: string;
+  /** 一组两样东西时拆开写，供 {key.1} / {key.2} 引用，如「杯子和积木」→ ['杯子','积木'] */
+  parts?: string[];
+  /** 一句话说明它为什么合适，选的时候看 */
+  note?: string;
+}
+
+export interface MaterialSlot {
+  /** 占位键，题干里写成 {key}；要孩子说的词写 {key.word}，一组里的第 n 样写 {key.n} */
+  key: string;
+  /** 这类教具在课里扮演什么角色 */
+  label: string;
+  /** 候选，至少 2 个，第 1 个是默认 */
+  options: MaterialOption[];
+  /** 一样都没有时的兜底办法 */
+  fallback: string;
+}
+
 export interface ExpressionTask {
   id: string;
-  /** 伙伴对孩子念的题干，照念，不加话 */
+  /** 伙伴对孩子念的题干，照念，不加话；可含 {slotKey} 占位 */
   ask: string;
-  /** 孩子卡住时给的提示句 */
+  /** 孩子卡住时给的提示句；同样支持 {slotKey} */
   hint: string;
   /** 判定提示项：人工勾选，不做自动计分 */
   checks: string[];
 }
+
+/** 槽位里出现过的所有占位键（含 {key.word} / {key.1} 形式），用于校验题干有没有引用不存在的教具 */
+export function placeholderKeys(text: string): string[] {
+  return Array.from(new Set(Array.from(text.matchAll(/\{([a-zA-Z][\w]*)(?:\.[\w]+)?\}/g), (m) => m[1])));
+}
+
+/** 默认选择：每个槽位取第一项；已有选择优先，避免刷新后跳回默认 */
+export function resolvePicks(materials: MaterialSlot[], picks: Record<string, string> = {}): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const slot of materials) {
+    const chosen = picks[slot.key];
+    out[slot.key] = slot.options.some((o) => o.name === chosen) ? chosen : (slot.options[0]?.name ?? '');
+  }
+  return out;
+}
+
+/**
+ * 把题干里的占位换成实际教具：
+ *   {key}        整串，如「杯子和积木」
+ *   {key.word}   孩子要说出的词，如「泡泡」
+ *   {key.1}      一组里的第 n 样，如「杯子」
+ * 没定义的占位原样留着，方便测试和现场排查。
+ */
+export function fillSlots(text: string, materials: MaterialSlot[], picks: Record<string, string> = {}): string {
+  const chosen = resolvePicks(materials, picks);
+  return text.replace(/\{([a-zA-Z][\w]*)(?:\.([\w]+))?\}/g, (whole, key: string, part?: string) => {
+    const slot = materials.find((s) => s.key === key);
+    if (!slot) return whole;
+    const option = slot.options.find((o) => o.name === chosen[key]) ?? slot.options[0];
+    if (!option) return whole;
+    if (!part) return chosen[key];
+    if (part === 'word') return option.word ?? option.name;
+    const index = Number(part);
+    if (Number.isInteger(index) && index >= 1) return option.parts?.[index - 1] ?? option.name;
+    return whole;
+  });
+}
+
+/** 这节课一句「教具清单」，进记录和导出用 */
+export function materialLine(materials: MaterialSlot[], picks: Record<string, string> = {}): string {
+  if (materials.length === 0) return '无需特意准备教具，用现场现成的';
+  const chosen = resolvePicks(materials, picks);
+  return materials.map((slot) => `${slot.label}：${chosen[slot.key]}`).join('；');
+}
+
 
 export interface ExpressionFamilyGuide {
   /** 练什么 */
@@ -122,6 +198,8 @@ export interface ExpressionTarget {
   /** 伙伴开场白 */
   opener: string;
   vbMapp: VbMappRef;
+  /** 这节课要用的教具槽位，题干里用 {key} 引用；一道都不用备时给空数组 */
+  materials: MaterialSlot[];
   tasks: ExpressionTask[];
   familyGuide: ExpressionFamilyGuide;
 }
@@ -154,24 +232,37 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
         '请求的动机就在眼前，是所有语言操作里最容易建立的。ASD 和发育迟缓的孩子常先学会拉手、指、哭来要东西，先把「说话」变成最省力的方式，后面的命名和对话才有地基。',
       tag: 'Mand L1',
     },
+    materials: [
+      {
+        key: 'item',
+        label: '他这会儿最想要的那样东西',
+        options: [
+          { name: '泡泡水', word: '泡泡', note: '吹的、看得见拿不到，动机最稳' },
+          { name: '饼干罐', word: '饼干', note: '拧紧的透明罐，最容易做出「必须开口」的情境' },
+          { name: '小汽车', word: '车', note: '放高处，够不到' },
+          { name: '气球', word: '气球', note: '吹到一半停住，他一定会要' },
+        ],
+        fallback: '用他此刻真的想要的那样东西就行，吃的玩的都可以；实在没有，就把他正在玩的玩具拿在手里、举高，不给他。',
+      },
+    ],
     tasks: [
       {
         id: 'B5-t1',
-        ask: '（把泡泡水举到他面前，盖子拧紧，看着他，不说话）',
-        hint: '「泡泡」',
-        checks: ['自己说出「泡泡」', '没有伸手来抢', '说完看着你等回应'],
+        ask: '（把{item}举到他面前，他拿不到，看着他，不说话）',
+        hint: '「{item.word}」',
+        checks: ['自己说出「{item.word}」', '没有伸手来抢', '说完看着你等回应'],
       },
       {
         id: 'B5-t2',
-        ask: '（把饼干装进透明罐子，拧紧，放在他面前）',
-        hint: '「饼干」',
-        checks: ['说出「饼干」', '不是只说「这个」「那个」', '说完等你打开'],
+        ask: '（把{item}放进他看得见、但自己打不开的容器里，放在他面前）',
+        hint: '「{item.word}」',
+        checks: ['说出「{item.word}」', '不是只说「这个」「那个」', '说完等你打开'],
       },
       {
         id: 'B5-t3',
-        ask: '（把小汽车放在他够不到的架子上）',
-        hint: '「车」',
-        checks: ['说出「车」或「汽车」', '看向目标物', '没有拉你的手去够'],
+        ask: '（把{item}放到他够不到的高处）',
+        hint: '「{item.word}」',
+        checks: ['说出「{item.word}」', '看向目标物', '没有拉你的手去够'],
       },
       {
         id: 'B5-t4',
@@ -187,7 +278,7 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
       start: '举着东西不说话，等他。不要问「要不要」，不要晃给他看。',
       wait: WAIT_THREE_SECONDS,
       prompts:
-        '① 给首字「泡…」→ ② 完整示范「泡泡」再等 3 秒 → ③ 手把手带他说一次。哪一级成功，下一次退回上一级；辅助只用来开头，不要一直给。',
+        '① 给首字「{item.word}」的第一个音 → ② 完整示范「{item.word}」再等 3 秒 → ③ 手把手带他说一次。哪一级成功，下一次退回上一级；辅助只用来开头，不要一直给。',
       success: '10 个回合里 ≥8 次他自己说出目标词（构音不准也算）。到这个程度告诉老师。',
       fallback:
         '只留一样最强动机的东西，一次只练这一个词；出不了词就先接住任何声音（嗯、啊都算），再慢慢塑形。',
@@ -215,23 +306,54 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
         '命名和请求共用同一批词，但动机不同：命名是「看到就说」，没有东西可要。词汇量是后面所有句子的材料，ASD 孩子尤其需要大量、能泛化的命名练习。',
       tag: 'Tact L1',
     },
+    materials: [
+      {
+        key: 'objects',
+        label: '他认识的 3 样实物',
+        options: [
+          { name: '杯子、球、小车', note: '最常用的一组，名称稳定、不易说错' },
+          { name: '碗、勺、毛巾', note: '生活自理类，家里一定有' },
+          { name: '苹果、香蕉、饼干', note: '吃的动机强，但容易变成「要东西」而不是「命名」' },
+        ],
+        fallback: '拿手边三样他一定认识的东西就行，名称最好都是两个字。',
+      },
+      {
+        key: 'cards',
+        label: '一组同类图片卡（10 张）',
+        options: [
+          { name: '动物卡' },
+          { name: '水果卡' },
+          { name: '日常用品卡' },
+        ],
+        fallback: '没有卡片就用手机相册里的照片，或者把实物摆一排、一块布盖着，一张一张露出来。',
+      },
+      {
+        key: 'actions',
+        label: '动作图片',
+        options: [
+          { name: '喝水、跑、睡觉' },
+          { name: '洗手、吃饭、跳' },
+        ],
+        fallback: '没有动作图就真人做动作让他说，或者拍他平时做这几件事的照片。',
+      },
+    ],
     tasks: [
       {
         id: 'G1-t1',
-        ask: '（桌上放 3 样他认识的实物：杯子、球、小车。你指一样，等他说）',
-        hint: '「杯子」',
+        ask: '（桌上放 3 样他认识的实物：{objects}。你指一样，等他说）',
+        hint: '说出你指的那样东西的名字，一次只说一个',
         checks: ['3 样里 ≥2 样独立说出', '说出的是名称，不是「这个」', '不用等提示'],
       },
       {
         id: 'G1-t2',
-        ask: '（摆 10 张常见物品图片卡，一张一张举起来）',
-        hint: '「苹果」',
+        ask: '（摆 10 张{cards}，一张一张举起来）',
+        hint: '说出举起来的这一张是什么',
         checks: ['≥8 张独立说出', '打乱顺序也能说', '没有一张重复问'],
       },
       {
         id: 'G1-t3',
-        ask: '（出示动作图片：喝水、跑、睡觉）',
-        hint: '「他在喝水」',
+        ask: '（出示动作图片：{actions}）',
+        hint: '「他在做什么」',
         checks: ['说出动作词', '能带上谁在做', '≥2 张独立说出'],
       },
       {
@@ -274,23 +396,55 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
         '句长是语言结构的门槛。发育迟缓的孩子常停在双词句，需要成人给出「多一个词」的支架；只说「说长一点」他听不懂，要直接给那一两个词的形状。',
       tag: 'Linguistic L2',
     },
+    materials: [
+      {
+        key: 'pair',
+        label: '两样颜色不同的东西',
+        options: [
+          { name: '红车和蓝球', note: '颜色对比强，先说颜色最顺' },
+          { name: '红积木和蓝杯子', note: '形状不同，逼他先说颜色而不是先说形状' },
+          { name: '黄香蕉和绿苹果', note: '吃的，动机强' },
+        ],
+        fallback: '随便找两样颜色明显不一样的东西，只要颜色是他已经会说的词。',
+      },
+      {
+        key: 'action',
+        label: '当场做的动作',
+        options: [
+          { name: '喝水' },
+          { name: '拍手' },
+          { name: '洗手' },
+        ],
+        fallback: '你自己做动作就行，不需要任何道具；做慢一点、做大一点。',
+      },
+      {
+        key: 'toy',
+        label: '一只他认识的玩偶或小物件',
+        options: [
+          { name: '小熊' },
+          { name: '小汽车' },
+          { name: '杯子' },
+        ],
+        fallback: '拿任何一件他能叫出名字的东西都可以，位置词换成「桌子上面／椅子旁边」照样练。',
+      },
+    ],
     tasks: [
       {
         id: 'G2-t1',
-        ask: '（桌上放红车、蓝球）你看这个，说成一句话：什么颜色的什么。',
+        ask: '（桌上放{pair}）你看这个，说成一句话：什么颜色的什么。',
         hint: '「红色的车」',
         checks: ['说出物品', '加上颜色或大小', '合成三词以上'],
       },
       {
         id: 'G2-t2',
-        ask: '（做一个动作：喝水）说一句话，谁在做什么。',
-        hint: '「宝宝在喝水」',
+        ask: '（做一个动作：{action}）说一句话，谁在做什么。',
+        hint: '「宝宝在{action}」',
         checks: ['有主语', '有动作词', '三词以上'],
       },
       {
         id: 'G2-t3',
-        ask: '（把小熊放到桌子下面）小熊在哪里？说成一句话。',
-        hint: '「小熊在桌子下面」',
+        ask: '（把{toy}放到桌子下面）{toy}在哪里？说成一句话。',
+        hint: '「{toy}在桌子下面」',
         checks: ['说清位置', '用上「在」', '三词以上'],
       },
       {
@@ -333,28 +487,59 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
         '两步指令考的是听懂加按顺序执行，不用自己组句，所以比开口表达容易起量。ASD 孩子常只听进最后一个词或只做第一步，先把「听完再动手」练稳，后面讲事情的顺序才有基础。',
       tag: 'Listener L2',
     },
+    materials: [
+      {
+        key: 'takePair',
+        label: '「拿」用的两样东西（t1）',
+        options: [
+          { name: '杯子和积木', parts: ['杯子', '积木'], note: '最稳的一组，名称都是两个字' },
+          { name: '碗和勺子', parts: ['碗', '勺子'], note: '家里一定有，起居场景更自然' },
+          { name: '杯子和毛巾', parts: ['杯子', '毛巾'], note: '动作差别大，不容易混' },
+        ],
+        fallback: '任何两样他叫得出名字的东西都行，只要两个动作清楚不一样。',
+      },
+      {
+        key: 'playPair',
+        label: '「拍 + 放」用的两样东西（t2）',
+        options: [
+          { name: '球和筐', parts: ['球', '筐'], note: '能拍能放，动作幅度大，最不容易只看不动' },
+          { name: '沙包和篮子', parts: ['沙包', '篮子'], note: '拍不动就改成「扔进篮子」，指令跟着换' },
+        ],
+        fallback: '找一个能拍／能扔的东西 + 一个能装东西的容器，两样都没有就用纸团和纸篓。',
+      },
+      {
+        key: 'deskPair',
+        label: '「给我 + 收回」用的两样东西（t3）',
+        options: [
+          { name: '纸和笔', parts: ['纸', '笔'], note: '桌面静态，坐得住的孩子更合适' },
+          { name: '本子和笔', parts: ['本子', '笔'] },
+          { name: '毛巾和盒子', parts: ['毛巾', '盒子'] },
+        ],
+        fallback: '一样递给你、一样放回容器，随便两样都行，「放回盒子」可以换成「放进抽屉」。',
+      },
+    ],
     tasks: [
       {
         id: 'G3-t1',
-        ask: '（桌上放一个杯子、一盒积木）听好：先拿杯子，再拿积木。',
-        hint: '「先拿杯子……再拿积木」',
+        ask: '（桌上放{takePair}）听好：先拿{takePair.1}，再拿{takePair.2}。',
+        hint: '「先拿{takePair.1}……再拿{takePair.2}」',
         checks: ['两步都做了', '顺序正确', '听完才开始动手'],
       },
       {
         id: 'G3-t2',
-        ask: '（地上放一个球、一个筐）听好：先拍一下球，再把球放进筐里。',
-        hint: '「先拍球……再放进筐」',
+        ask: '（放好{playPair}）听好：先拍一下{playPair.1}，再把{playPair.1}放进{playPair.2}里。',
+        hint: '「先拍{playPair.1}……再放进{playPair.2}」',
         checks: ['两步都做完', '顺序正确', '没有做到一半停下'],
       },
       {
         id: 'G3-t3',
-        ask: '（桌上有笔和纸）听好：先把纸拿给我，再把笔放回盒子。',
-        hint: '「先给我纸……再收笔」',
+        ask: '（桌上放{deskPair}）听好：先把{deskPair.1}拿给我，再把{deskPair.2}放回原处。',
+        hint: '「先给我{deskPair.1}……再收{deskPair.2}」',
         checks: ['两步都做完', '顺序正确', '不用重复指令'],
       },
       {
         id: 'G3-t4',
-        ask: '（把玩具放在他面前）听好：先站起来，再拍拍手。',
+        ask: '（什么都不用拿）听好：先站起来，再拍拍手。',
         hint: '「先站……再拍手」',
         checks: ['两步都做完', '顺序正确', '中间没等我再说一遍'],
       },
@@ -392,28 +577,68 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
         '对话是「听到话再说话」，眼前没有实物可指，难度高于命名和请求。先练答，答稳了再教问——问句是 Mand，比答更难。',
       tag: 'Intraverbal L2',
     },
+    materials: [
+      {
+        key: 'picture',
+        label: '一张他认识的物品图',
+        options: [
+          { name: '苹果', note: '最常见，几乎所有卡盒里都有' },
+          { name: '香蕉' },
+          { name: '小狗' },
+        ],
+        fallback: '用实物举起来问也一样，「这是什么」不依赖卡片。',
+      },
+      {
+        key: 'photos',
+        label: '家人照片（3 张以上）',
+        options: [
+          { name: '妈妈、爸爸、爷爷的照片', note: '称谓最稳定，孩子见得最多' },
+          { name: '妈妈、老师、小朋友的照片', note: '教室里更好凑，但「小朋友」容易说成名字' },
+        ],
+        fallback: '用手机里现成的照片就行；实在没有就指着教室里真人问「这是谁」。',
+      },
+      {
+        key: 'toy',
+        label: '一件他认识的物品（练「在哪」）',
+        options: [
+          { name: '小熊' },
+          { name: '小汽车' },
+          { name: '水杯' },
+        ],
+        fallback: '随手拿一样东西藏起来就行，「在哪」问的是位置，不是这个东西本身。',
+      },
+      {
+        key: 'bag',
+        label: '一个看不见里面的袋子',
+        options: [
+          { name: '不透明袋子', note: '只露一角，最能勾出「这是什么」' },
+          { name: '一只袜子', note: '临时替代，效果一样' },
+        ],
+        fallback: '用手捂着、用书挡着都行，关键是让他看不见全貌。',
+      },
+    ],
     tasks: [
       {
         id: 'G4-t1',
-        ask: '（举起一张图片）这是什么？',
-        hint: '「这是苹果」',
+        ask: '（举起一张{picture}的图片）这是什么？',
+        hint: '「这是{picture}」',
         checks: ['答出名称', '2 秒内回答', '不用二选一'],
       },
       {
         id: 'G4-t2',
-        ask: '（出示家人照片）这是谁？',
+        ask: '（出示{photos}）这是谁？',
         hint: '「这是妈妈」',
         checks: ['答出称谓', '≥3 张正确', '不用提示'],
       },
       {
         id: 'G4-t3',
-        ask: '（问常见物品的位置）小熊在哪里？',
+        ask: '（把{toy}藏起来，问他位置）{toy}在哪里？',
         hint: '「在床上」',
         checks: ['答出地点', '用上「在」', '≥3 次正确'],
       },
       {
         id: 'G4-t4',
-        ask: '（把一个他没见过的物品放进袋子，只露一角）',
+        ask: '（把一件他没见过的物品放进{bag}，只露一角）',
         hint: '「这是什么？」',
         checks: ['主动问 ≥1 次', '问的是「是什么」类', '问完等回答'],
       },
@@ -451,6 +676,38 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
         '这是 G 段四类语用的综合检验：请求、拒绝、求助、打招呼都能自发用出来，才说明语言真的进了日常。K 段的 K2 拒绝、K3 求助是同一功能的学龄版（更独立、更少提示），所以这里只要求学前水平的三类就达标。',
       tag: 'Mand/Social L2',
     },
+    materials: [
+      {
+        key: 'snack',
+        label: '他喜欢的小点心（t2 请求）',
+        options: [
+          { name: '小饼干', note: '一口量，不会吃太久' },
+          { name: '葡萄干' },
+          { name: '果冻' },
+        ],
+        fallback: '他平时最爱吃的一口量就行；没有吃的就用玩具，重点是「看得到、要开口」。',
+      },
+      {
+        key: 'unwanted',
+        label: '一样他不想要的东西（t3 拒绝）',
+        options: [
+          { name: '一块生胡萝卜', note: '不喜欢但无害，拒绝得自然' },
+          { name: '一块苦瓜' },
+          { name: '一件他不玩的玩具' },
+        ],
+        fallback: '任何他不会主动要的东西都可以，只要不是他害怕的东西——怕的东西测不出「拒绝」这个词。',
+      },
+      {
+        key: 'tightBox',
+        label: '一个他自己打不开的容器（t4 求助）',
+        options: [
+          { name: '拧得很紧的瓶子', note: '最典型，求助动机强' },
+          { name: '扣得很紧的盒子' },
+          { name: '卡住的抽屉' },
+        ],
+        fallback: '拧紧、扣紧、卡住都行，关键是他试过、确认自己弄不开，才会想到叫人。',
+      },
+    ],
     tasks: [
       {
         id: 'G5-t1',
@@ -460,19 +717,19 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
       },
       {
         id: 'G5-t2',
-        ask: '（把喜欢的点心放在透明盒里，不给他勺子）',
+        ask: '（把{snack}放在透明盒里，放在他面前，不打开也不给勺子）',
         hint: '「请给我一个勺子」',
         checks: ['说出请求', '用上「给我」或「请」', '不是直接伸手'],
       },
       {
         id: 'G5-t3',
-        ask: '（递给他一样不想要的东西）',
+        ask: '（递给他{unwanted}）',
         hint: '「我不要」',
         checks: ['明确说「不要」', '没有推开', '语气平和'],
       },
       {
         id: 'G5-t4',
-        ask: '（给他一个打不开的盒子）',
+        ask: '（给他{tightBox}，他能看见里面是什么，但打不开）',
         hint: '「帮我打开」',
         checks: ['主动开口', '说清要什么', '等到回应再重复'],
       },
@@ -509,6 +766,18 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
         '叙述要同时组织时间顺序和要素，是学龄段的核心。ASD 孩子常记得片段但连不成线，四要素就是给他的支架——缺哪个补哪个，不要笼统要求「说清楚」。',
       tag: 'Intraverbal L3',
     },
+    materials: [
+      {
+        key: 'story',
+        label: '一套三格图片故事（t3）',
+        options: [
+          { name: '洗脸三步图', note: '拧毛巾、擦脸、挂毛巾，动作清楚' },
+          { name: '起床三步图' },
+          { name: '手机里连续三张照片', note: '现拍也行，用他自己刚做的事更容易开口' },
+        ],
+        fallback: '没有成套图卡就把三张照片存手机里，或者现场拍三张；也可以用三样实物摆出顺序代替。',
+      },
+    ],
     tasks: [
       {
         id: 'K1-t1',
@@ -524,7 +793,7 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
       },
       {
         id: 'K1-t3',
-        ask: '（三格图片故事）这三张图讲了什么？一张一张说。',
+        ask: '（出示{story}）这三张图讲了什么？一张一张说。',
         hint: '「第一张……第二张……」',
         checks: ['三格都说到', '顺序正确', '有连接词'],
       },
@@ -567,28 +836,70 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
         '拒绝是使用频率最高的请求之一。ASD 孩子不会用词拒绝时，往往用推、哭、跑掉代替，问题行为多半从这里长出来——先给他一句好用的话，比事后纠正行为省力得多。',
       tag: 'Mand L2',
     },
+    materials: [
+      {
+        key: 'unliked',
+        label: '一样他确实不想要的东西（t1）',
+        options: [
+          { name: '一块生胡萝卜', note: '不喜欢但无害，拒绝得自然' },
+          { name: '一块苦瓜' },
+          { name: '一条凉毛巾' },
+        ],
+        fallback: '任何他不会主动要、也不害怕的东西都行；他害怕的东西测不出「不要」这个词，只会测出躲。',
+      },
+      {
+        key: 'toy',
+        label: '他正玩得起劲的玩具（t2）',
+        options: [
+          { name: '他手上的那一个', note: '不用另找，就在他手里' },
+          { name: '小汽车' },
+          { name: '积木' },
+        ],
+        fallback: '先用别的玩具把他带进状态，等他玩进去了再拿走——手里没东西的时候，索回就无从练起。',
+      },
+      {
+        key: 'drawing',
+        label: '他刚做出来的作品（t3）',
+        options: [
+          { name: '他刚画的画', note: '自己做的，护得最紧' },
+          { name: '他刚搭的积木' },
+          { name: '他刚拼好的拼图' },
+        ],
+        fallback: '没作品就用他刚摆好的东西，关键是「这是他做的」，被抢才有反应。',
+      },
+      {
+        key: 'screen',
+        label: '他正在看的东西（t4）',
+        options: [
+          { name: '正在放的动画片', note: '动机最强，但要事先说好只看一小段' },
+          { name: '正在放的儿歌视频' },
+          { name: '正在听的音频故事' },
+        ],
+        fallback: '没有屏幕就用他正在玩的玩具替代，把「关掉了」换成「收起来了」。',
+      },
+    ],
     tasks: [
       {
         id: 'K2-t1',
-        ask: '（递给他一样他不喜欢的东西，比如一块生胡萝卜）',
+        ask: '（递给他{unliked}，说「给你」）',
         hint: '「不要」',
         checks: ['1 秒内说出「不要」', '音量能被听清', '没有推开或哭'],
       },
       {
         id: 'K2-t2',
-        ask: '（把他手上的玩具拿走，握在自己手里）',
+        ask: '（把{toy}从他手上拿走，握在自己手里）',
         hint: '「还给我」',
         checks: ['说出「还给我」', '看着对方说', '说完伸手要回'],
       },
       {
         id: 'K2-t3',
-        ask: '（假装抢走他的画，角色扮演）',
+        ask: '（假装抢走{drawing}，角色扮演）',
         hint: '「不要抢，还给我」',
         checks: ['组合成短句', '语气坚定', '没有直接动手'],
       },
       {
         id: 'K2-t4',
-        ask: '（关掉他正在看的动画，说「关掉了」）',
+        ask: '（关掉{screen}，说「关掉了」）',
         hint: '「不要关，我还想看」',
         checks: ['说出「不要」', '补一句要求', '音量可听清'],
       },
@@ -626,28 +937,68 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
         '求助要先觉察「我卡住了」，再主动找人，比要东西难一层。这一条不通，孩子容易直接放弃或发脾气，学业和自理都会卡在同一个点上。',
       tag: 'Mand L2',
     },
+    materials: [
+      {
+        key: 'tight',
+        label: '一个他拧不开的零食罐（t1）',
+        options: [
+          { name: '拧紧的零食罐', note: '里面装他爱吃的，动机强' },
+          { name: '扣紧的饭盒' },
+          { name: '封口的饼干袋' },
+        ],
+        fallback: '任何他确定自己打不开的东西都行；关键是你能打开、他打不开，差距要明显。',
+      },
+      {
+        key: 'highToy',
+        label: '一样他想要、但够不到的玩具（t2）',
+        options: [
+          { name: '柜子顶上的玩具', note: '原地不动就能做成，最容易重复' },
+          { name: '架子高层的盒子' },
+        ],
+        fallback: '不用真的有柜子，把东西放到他自己拿不到的高度就行。',
+      },
+      {
+        key: 'brokenPen',
+        label: '一样坏了／缺了的东西（t3）',
+        options: [
+          { name: '写不出水的笔', note: '安静地坏，必须他自己发现' },
+          { name: '没电池的玩具' },
+          { name: '断了的蜡笔' },
+        ],
+        fallback: '任何「看起来能用、实际用不了」的东西都行，重点是让他先动手试一次。',
+      },
+      {
+        key: 'puzzle',
+        label: '一个缺一块的拼图（t4）',
+        options: [
+          { name: '缺最后一块的拼图', note: '差一步就完成，最容易急' },
+          { name: '缺一块的嵌板' },
+        ],
+        fallback: '任何「快完成但缺一件」的任务都可以，比如少一颗珠子的串珠。',
+      },
+    ],
     tasks: [
       {
         id: 'K3-t1',
-        ask: '（把一个拧得很紧的零食罐放在他面前，你退到两米外）',
+        ask: '（把{tight}放在他面前，你退到两米外）',
         hint: '「老师，帮我」',
         checks: ['走过来找你', '开口叫了人', '说出要帮什么'],
       },
       {
         id: 'K3-t2',
-        ask: '（把他喜欢的玩具放在他够不到的柜子顶上）',
+        ask: '（把{highToy}放在他够不到的高处）',
         hint: '「我够不到，帮我拿」',
         checks: ['主动走向成人', '说出「帮我」', '没有自己爬高'],
       },
       {
         id: 'K3-t3',
-        ask: '（给他一支写不出水的笔和一张纸）',
-        hint: '「笔坏了，帮我换」',
+        ask: '（给他{brokenPen}，让他自己试一次）',
+        hint: '「这个坏了，帮我换」',
         checks: ['发现问题', '开口说明', '指出问题在哪'],
       },
       {
         id: 'K3-t4',
-        ask: '（把拼图最后一块藏起来，他拼不上）',
+        ask: '（把{puzzle}的最后一块藏起来，他拼不上）',
         hint: '「少了一块，帮我找」',
         checks: ['说出卡在哪', '主动求助', '没有直接放弃'],
       },
@@ -685,22 +1036,52 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
         '听一遍就要记住并说出来，工作记忆负荷最高之一。一次只加一个信息、比反复重复更有效——重复三遍再说，练的是「等」，不是「记」。',
       tag: 'Intraverbal L3',
     },
+    materials: [
+      {
+        key: 'notice1',
+        label: '第 1 条通知（一个信息）',
+        options: [
+          { name: '明天带水杯', note: '最常见，真实会发生' },
+          { name: '明天带跳绳' },
+          { name: '明天带作业本' },
+        ],
+        fallback: '用今天真的要通知的事，别编无意义的句子——编出来的他记不住也没用。',
+      },
+      {
+        key: 'notice2',
+        label: '第 2 条通知（两个信息）',
+        options: [
+          { name: '下午去操场玩，带上帽子', note: '地点 + 物品，难度刚好' },
+          { name: '下午去图书角，带上借书卡' },
+        ],
+        fallback: '从「去哪 + 带什么」这个结构里随便挑一件真实的事。',
+      },
+      {
+        key: 'notice3',
+        label: '第 3 条通知（三个信息）',
+        options: [
+          { name: '妈妈五点在门口接你，别乱跑', note: '谁 + 几点 + 在哪，三要素齐' },
+          { name: '爸爸四点半在校门口等你' },
+        ],
+        fallback: '换成今天真实接送的人和时间，越接近当天越容易记住。',
+      },
+    ],
     tasks: [
       {
         id: 'K4-t1',
-        ask: '听好：明天带水杯。你说一遍。',
+        ask: '听好：{notice1}。你说一遍。',
         hint: '「明天带什么？」',
         checks: ['说出「水杯」', '说出「明天」', '一次就记住'],
       },
       {
         id: 'K4-t2',
-        ask: '听好：下午去操场玩，带上帽子。你说一遍。',
+        ask: '听好：{notice2}。你说一遍。',
         hint: '「先说去哪，再说带什么」',
         checks: ['两个信息都有', '顺序正确', '不用重复一遍'],
       },
       {
         id: 'K4-t3',
-        ask: '听好：妈妈五点在门口接你，别乱跑。你说一遍。',
+        ask: '听好：{notice3}。你说一遍。',
         hint: '「几点？在哪？」',
         checks: ['说出时间', '说出地点', '说出要求'],
       },
@@ -743,16 +1124,38 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
         '电话没有表情和手势可用，是纯听觉的语言任务，最考验泛化——桌面练会了，换个通道就散架的情况很常见，所以放最后，专门练「换人换场景还能说」。',
       tag: 'Intraverbal L3',
     },
+    materials: [
+      {
+        key: 'phone',
+        label: '打电话用的工具（t1 / t4）',
+        options: [
+          { name: '真手机（走到另一个房间）', note: '真实感最强，看不到人，只能靠听' },
+          { name: '玩具手机', note: '没有声卡的机构用这个，配一个人在对面对话' },
+          { name: '手机开免提', note: '中间方案，能听到但看不见' },
+        ],
+        fallback: '没有手机就用两个纸杯穿线，或者隔着屏风／门说话——关键是「看不见人」。',
+      },
+      {
+        key: 'scene',
+        label: '模拟的紧急情境（t2）',
+        options: [
+          { name: '找不到妈妈了', note: '动机真实，三要素最容易说全' },
+          { name: '在超市走散了' },
+          { name: '放学没人来接' },
+        ],
+        fallback: '用他真实经历过的一次走散或等待，比虚构的情境更容易说清楚。',
+      },
+    ],
     tasks: [
       {
         id: 'K5-t1',
-        ask: '（用真手机演，你走到另一个房间当接电话的人）喂，你好。',
+        ask: '（用{phone}演，你走到另一个房间当接电话的人）喂，你好。',
         hint: '「我是……我在……我要……」',
         checks: ['说出自己是谁', '说出在哪', '说出需要什么'],
       },
       {
         id: 'K5-t2',
-        ask: '（演：你找不到妈妈了，给老师打电话）',
+        ask: '（演：{scene}，给老师打电话）',
         hint: '「老师，我是××，我在超市」',
         checks: ['三要素齐', '顺序正确', '语气能听清'],
       },

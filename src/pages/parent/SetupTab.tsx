@@ -844,7 +844,11 @@ export default function SetupTab() {
                           type="button"
                           disabled={Boolean(previewing)}
                           onClick={() =>
-                            previewVoice(key, companionMeta[game.hostCompanionId].greeting, voiceForSpeaker(speechConfig, game.hostCompanionId, game.id))
+                            previewVoice(
+                              key,
+                              companionMeta[game.hostCompanionId as keyof typeof companionMeta]?.greeting ?? '',
+                              voiceForSpeaker(speechConfig, game.hostCompanionId, game.id),
+                            )
                           }
                           className="h-8 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-100"
                         >
