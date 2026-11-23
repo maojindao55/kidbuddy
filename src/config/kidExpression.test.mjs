@@ -59,19 +59,22 @@ const session = (over) => ({
   ...over,
 });
 
-// ---- 目标库与 skill 编号一致 ----
+// ---- 目标库与 skill 编号一致，且按 VB-MAPP 语言操作顺序排列 ----
 {
-  const ids = targets.EXPRESSION_TARGETS.map((t) => t.id);
-  assert.deepEqual(ids, ['G2', 'G4', 'G5', 'K1', 'K2', 'K3', 'K4', 'K5']);
+  const ids = targets.EXPRESSION_TARGETS_BY_DIFFICULTY.map((t) => t.id);
+  assert.deepEqual(ids, ['B5', 'G1', 'G2', 'K2', 'K3', 'G5', 'G4', 'K1', 'K4', 'K5']);
   for (const t of targets.EXPRESSION_TARGETS) {
     assert.ok(t.tasks.length >= 3, `${t.id} 至少 3 道题`);
     assert.ok(t.standard2.length > 0 && t.onePenalty.length > 0);
+    assert.ok(t.sessionSuccess && t.sessionSuccess.length > 0, `${t.id} 缺本次达标线`);
+    assert.ok(t.vbMapp && t.vbMapp.tag, `${t.id} 缺 VB-MAPP 标签`);
     const g = t.familyGuide;
     for (const key of ['what', 'prepare', 'start', 'wait', 'prompts', 'success', 'fallback', 'dose', 'avoid']) {
       assert.ok(g[key] && g[key].length > 0, `${t.id} 家庭指导缺 ${key}`);
     }
   }
   assert.equal(targets.getExpressionTarget('K1').name, '说清一件事');
+  assert.equal(targets.getExpressionTarget('B5').name, '开口要东西');
   assert.equal(targets.getExpressionTarget('nope'), undefined);
 }
 

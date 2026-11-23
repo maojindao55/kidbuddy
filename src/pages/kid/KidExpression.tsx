@@ -106,6 +106,13 @@ function TargetCard({
       <div className="flex flex-wrap items-center gap-2">
         <ScoreChip score={stat.last} />
         <span className="text-xs text-slate-400">已练 {stat.attempts} 次</span>
+        <span
+          data-testid={`expression-vbmapp-${target.id}`}
+          className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-bold text-violet-700"
+          title={target.vbMapp.milestone}
+        >
+          VB-MAPP {target.vbMapp.tag}
+        </span>
       </div>
       <div className="rounded-xl bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-500">{historyLine(stat)}</div>
       <div className="mt-auto flex items-start justify-between gap-2 pt-1">
@@ -222,7 +229,7 @@ export default function KidExpression() {
           <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h2 className="text-xl font-extrabold text-slate-800">选一个目标开始练</h2>
             <span className="text-xs font-bold text-slate-400">
-              由易到难排列（1 最容易），一个目标练稳了再往下走
+              按 VB-MAPP 语言操作顺序由易到难（1 最容易），练稳一个再往下走
             </span>
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

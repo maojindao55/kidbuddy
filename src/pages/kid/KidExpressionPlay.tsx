@@ -601,6 +601,9 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
           <h1 className="truncate text-xl font-extrabold text-slate-800">
             {target.id} {target.name}
           </h1>
+          <span className="mt-0.5 inline-block rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-bold text-violet-700">
+            VB-MAPP {target.vbMapp.tag}
+          </span>
           <div className="text-xs text-slate-500">
             试次 {Math.min(idx + 1, trials.length)} / {trials.length} · 连续独立正确 {stats.currentStreak} 次 · {by}带练 · {student}
           </div>
@@ -661,6 +664,10 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
                 .map((p) => p.short)
                 .join(' → ')}
               （给了就要往下退）
+            </div>
+            <div className="mt-2 rounded-xl bg-emerald-50 p-2.5 text-sm text-emerald-800">
+              <span className="font-bold">本次达标：</span>
+              {target.sessionSuccess}
             </div>
             <div className="mt-2 flex flex-wrap gap-2">
               {readAloud.supported && (

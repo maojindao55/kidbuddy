@@ -260,10 +260,11 @@ export function composeThreeLines(
 
   const uniqueAsks = Array.from(new Set(session.rounds.map((r) => r.ask.replace(/[。？]$/, ''))));
 
+  const tag = `${target.id} ${target.name}（VB-MAPP ${target.vbMapp.tag}）`;
   const did =
     judged === 0
-      ? `${target.id} ${target.name}，DTT 计划 ${total} 试次，本节没有判定。`
-      : `${target.id} ${target.name}，DTT 计划 ${total} 试次、已判定 ${judged} 试次；题目：${uniqueAsks.join('／')}。`;
+      ? `${tag}，DTT 计划 ${total} 试次，本节没有判定。`
+      : `${tag}，DTT 计划 ${total} 试次、已判定 ${judged} 试次；题目：${uniqueAsks.join('／')}。`;
 
   let achieved: string;
   if (judged === 0) {
