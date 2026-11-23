@@ -43,12 +43,12 @@ assert.match(parent, /<Navigate to="\/" replace \/>/);
 assert.doesNotMatch(parent, /from '\.\.\/chat'/, 'parent area no longer reuses old adult chat');
 
 const gate = await read('./components/ParentGate.tsx');
-// 家长入口必须一眼能找到：单击即弹验证（早先要求长按 1.5 秒，家长根本发现不了）
-assert.match(gate, /onClick=\{\(\) => setOpen\(true\)\}/, '点一下就要弹家长验证');
-assert.doesNotMatch(gate, /LONG_PRESS_MS/, '不再要求长按');
-assert.match(gate, /aria-label="家长中心（需验证）"/, '入口要有明确的无障碍名称');
-assert.match(gate, /BADGE_LABEL = '家长'/, '入口上要有「家长」字样');
-assert.match(gate, /\{BADGE_LABEL\}<\/span>/, '「家长」字样要真的渲染出来');
+// 家长入口要长按 1.5 秒才弹验证（防孩子误触），角标上必须写明「长按」
+assert.match(gate, /LONG_PRESS_MS = 1500/, '长按 1.5 秒');
+assert.match(gate, /onPointerDown=/, '按住开始计时');
+assert.match(gate, /onPointerUp=\{cancel\}|onPointerLeave=\{cancel\}/, '松手/移出要取消计时');
+assert.match(gate, /BADGE_LABEL = '长按'/, '角标要写明「长按」，否则家长只会点一下');
+assert.match(gate, /aria-label="家长中心（长按 1\.5 秒进入）"/, '无障碍名称要说清长按');
 assert.match(gate, /checkChallengeAnswer/);
 assert.match(gate, /unlockParentArea\(\)/);
 assert.match(gate, /hasParentPin/);
