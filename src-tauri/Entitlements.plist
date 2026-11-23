@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- 按住说话 / 1v1 实时语音需要麦克风。
+         hardened runtime 下缺这一项，TCC 会直接拒绝且不弹授权框。 -->
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
+</dict>
+</plist>
