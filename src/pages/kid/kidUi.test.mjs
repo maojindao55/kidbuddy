@@ -98,6 +98,8 @@ assert.match(exprHome, /stage-filter-/, '要有学段筛选');
 assert.match(exprHome, /kidbuddy\.expression\.stage/, '学段选择要记住');
 assert.match(exprHome, /expression-modality-/, '卡片要显示听/说标记');
 assert.match(exprHome, /MODALITY_LABEL/, '听/说标记要用统一文案');
+// 台阶上限写成常量：曾经写死「/ 10」，补到 11 条后文案就错了。
+assert.doesNotMatch(exprHome, /\/\s*10\b/, '台阶总数不能写死，要用 EXPRESSION_TARGETS_BY_STAGE.length');
 const exprPlay = await read('./KidExpressionPlay.tsx');
 assert.match(exprPlay, /MODALITY_LABEL/, '练习页也要显示听/说标记');
 assert.match(exprPlay, /modality === 'receptive'/, '听者反应类目标要有「看动作不要求开口」的说明');

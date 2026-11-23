@@ -102,7 +102,7 @@ function TargetCard({
           <div className="flex flex-wrap items-center gap-1.5">
             <span
               data-testid={`expression-step-${target.id}`}
-              title={`全表台阶 ${target.difficulty} / 10，越小越容易`}
+              title={`全表第 ${target.difficulty} 级（共 ${EXPRESSION_TARGETS_BY_STAGE.length} 个目标），数字越小越容易`}
               className="flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full bg-rose-500 px-1.5 text-xs font-extrabold text-white"
             >
               {target.difficulty}
