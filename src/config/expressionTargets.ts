@@ -34,6 +34,24 @@
 
 export type ExpressionBand = 'infant' | 'preschool' | 'school';
 
+/**
+ * 沟通通道：
+ * - receptive 听者反应——听懂并做动作，不要求开口（如 G3 两步指令）
+ * - expressive 表达——要把话说出来
+ * 界面上分别显示「听」「说」两个标记，避免把听指令的目标当成开口目标去判分。
+ */
+export type ExpressionModality = 'receptive' | 'expressive';
+
+export const MODALITY_LABEL: Record<ExpressionModality, string> = {
+  receptive: '听',
+  expressive: '说',
+};
+
+/** 听者反应类目标：判分看动作对不对，不看说没说 */
+export function isReceptive(target: { modality: ExpressionModality }): boolean {
+  return target.modality === 'receptive';
+}
+
 export interface ExpressionTask {
   id: string;
   /** 伙伴对孩子念的题干，照念，不加话 */
@@ -89,6 +107,8 @@ export interface ExpressionTarget {
    * 语用 → 问答 → 叙述 → 复述 → 转述）。
    */
   difficulty: number;
+  /** 听 / 说：听者反应类目标只看动作对不对，不要求开口 */
+  modality: ExpressionModality;
   /** 五领域归类，用于统计 */
   domain: '语言沟通' | '语言表达';
   /** 一句话说清练什么，给孩子和家长看 */
@@ -119,6 +139,7 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
     name: '开口要东西',
     band: 'infant',
     difficulty: 1,
+    modality: 'expressive',
     domain: '语言沟通',
     summary: '想要的东西在眼前，用词说出来，不用伸手、不用哭',
     standard2: '在需要时主动说出 ≥1 个稳定的词（同一情境 3 次以上）',
@@ -179,6 +200,7 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
     name: '看见就说',
     band: 'preschool',
     difficulty: 2,
+    modality: 'expressive',
     domain: '语言沟通',
     summary: '看到实物或图片，能说出它的名称',
     standard2: '常见名词、动词、形容词总量 ≥200，且能主动使用 ≥150',
@@ -237,6 +259,7 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
     name: '把词连成句',
     band: 'preschool',
     difficulty: 3,
+    modality: 'expressive',
     domain: '语言沟通',
     summary: '把两个词连成三个词以上的一句话',
     standard2: '自发说出三词以上简单句 ≥5 次/次观察',
@@ -295,6 +318,7 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
     name: '听两步指令',
     band: 'preschool',
     difficulty: 4,
+    modality: 'receptive',
     domain: '语言沟通',
     summary: '听到「先…再…」两步指令，按顺序把两件事都做完',
     standard2: '「先…再…」两步指令顺序正确 ≥3/4 次',
@@ -353,6 +377,7 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
     name: '提问与回答',
     band: 'preschool',
     difficulty: 5,
+    modality: 'expressive',
     domain: '语言沟通',
     summary: '能回答「什么/谁/在哪」，也能自己问一句',
     standard2: '能回答什么/谁/在哪；能主动问「这是什么」',
@@ -411,6 +436,7 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
     name: '语用四类',
     band: 'preschool',
     difficulty: 6,
+    modality: 'expressive',
     domain: '语言沟通',
     summary: '请求、拒绝、求助、打招呼，四类里能自己说出三类',
     standard2: '请求、拒绝、求助、打招呼四类中 ≥3 类能主动说出',
@@ -468,6 +494,7 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
     name: '说清一件事',
     band: 'school',
     difficulty: 7,
+    modality: 'expressive',
     domain: '语言表达',
     summary: '用「谁—在哪—做了什么—然后」讲清一件亲身经历',
     standard2: '用「谁—在哪—做了什么—然后」四要素讲述亲身经历，要素齐全率 ≥3/4',
@@ -525,6 +552,7 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
     name: '拒绝与索回',
     band: 'school',
     difficulty: 8,
+    modality: 'expressive',
     domain: '语言表达',
     summary: '不想给就说「不要」，东西被拿走就说「还给我」',
     standard2: '角色扮演/真实情境中，3 次均能说出「不要」「还给我」，音量可被听清',
@@ -583,6 +611,7 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
     name: '主动求助',
     band: 'school',
     difficulty: 9,
+    modality: 'expressive',
     domain: '语言表达',
     summary: '卡住了就找人开口说「帮我」，不自己硬撑也不放弃',
     standard2: '主动走向指定成人并开口「老师，我……」，完成一次求助',
@@ -641,6 +670,7 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
     name: '复述通知',
     band: 'school',
     difficulty: 10,
+    modality: 'expressive',
     domain: '语言表达',
     summary: '听完一句通知，能把关键信息说出来',
     standard2: '听完 1-2 句通知后复述关键信息，正确率 ≥80%',
@@ -698,6 +728,7 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
     name: '电话说清三要素',
     band: 'school',
     difficulty: 11,
+    modality: 'expressive',
     domain: '语言表达',
     summary: '电话或当面对别人说清「我是谁、我在哪、我需要什么」',
     standard2: '依次说出「我是谁、我在哪、我需要什么」，不依赖提示卡',

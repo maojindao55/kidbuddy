@@ -96,5 +96,10 @@ assert.match(exprHome, /\{target\.difficulty\}/, '台阶编号必须直接用 di
 assert.doesNotMatch(exprHome, /step=\{i \+ 1\}/, '不允许按列表下标重新编号');
 assert.match(exprHome, /stage-filter-/, '要有学段筛选');
 assert.match(exprHome, /kidbuddy\.expression\.stage/, '学段选择要记住');
+assert.match(exprHome, /expression-modality-/, '卡片要显示听/说标记');
+assert.match(exprHome, /MODALITY_LABEL/, '听/说标记要用统一文案');
+const exprPlay = await read('./KidExpressionPlay.tsx');
+assert.match(exprPlay, /MODALITY_LABEL/, '练习页也要显示听/说标记');
+assert.match(exprPlay, /modality === 'receptive'/, '听者反应类目标要有「看动作不要求开口」的说明');
 
 console.log('kidUi.test.mjs: ok');

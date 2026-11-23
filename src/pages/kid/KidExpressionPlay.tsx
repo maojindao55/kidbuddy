@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
-import { getExpressionTarget, type ExpressionTarget, type ExpressionTask } from '@/config/expressionTargets';
+import {
+  MODALITY_LABEL,
+  getExpressionTarget,
+  type ExpressionTarget,
+  type ExpressionTask,
+} from '@/config/expressionTargets';
 import {
   DTT_OUTCOME_LABEL,
   DTT_PROMPT_LEVELS,
@@ -601,9 +606,18 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
           <h1 className="truncate text-xl font-extrabold text-slate-800">
             {target.id} {target.name}
           </h1>
-          <span className="mt-0.5 inline-block rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-bold text-violet-700">
-            VB-MAPP {target.vbMapp.tag}
-          </span>
+          <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+            <span
+              className={`rounded px-1.5 py-0.5 text-[11px] font-extrabold ${
+                target.modality === 'receptive' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-500'
+              }`}
+            >
+              {MODALITY_LABEL[target.modality]}
+            </span>
+            <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-bold text-violet-700">
+              VB-MAPP {target.vbMapp.tag}
+            </span>
+          </div>
           <div className="text-xs text-slate-500">
             试次 {Math.min(idx + 1, trials.length)} / {trials.length} · 连续独立正确 {stats.currentStreak} 次 · {by}带练 · {student}
           </div>
@@ -665,6 +679,11 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
                 .join(' → ')}
               （给了就要往下退）
             </div>
+            {target.modality === 'receptive' && (
+              <div className="mt-2 rounded-xl bg-slate-100 p-2.5 text-sm font-bold text-slate-700">
+                这条看动作，不要求开口：他没出声、但两步都做对了，就记独立正确。
+              </div>
+            )}
             <div className="mt-2 rounded-xl bg-emerald-50 p-2.5 text-sm text-emerald-800">
               <span className="font-bold">本次达标：</span>
               {target.sessionSuccess}

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   EXPRESSION_STAGES,
   EXPRESSION_TARGETS_BY_STAGE,
+  MODALITY_LABEL,
   isStageBand,
   stageGroups,
   suggestNextTarget,
@@ -108,6 +109,15 @@ function TargetCard({
             </span>
             <span className="rounded-lg bg-rose-100 px-2 py-0.5 text-xs font-extrabold text-rose-700">{target.id}</span>
             <span className="text-lg font-extrabold text-slate-800">{target.name}</span>
+            <span
+              data-testid={`expression-modality-${target.id}`}
+              title={target.modality === 'receptive' ? '听者反应：看动作对不对，不要求开口' : '表达：要把话说出来'}
+              className={`rounded px-1.5 py-0.5 text-[11px] font-extrabold ${
+                target.modality === 'receptive' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-500'
+              }`}
+            >
+              {MODALITY_LABEL[target.modality]}
+            </span>
             <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${tierStyle[tier]}`}>{tier}</span>
           </div>
           <p className="mt-1 text-sm leading-snug text-slate-500">{target.summary}</p>

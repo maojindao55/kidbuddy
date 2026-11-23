@@ -66,6 +66,22 @@ const { EXPRESSION_TARGETS, EXPRESSION_TARGETS_BY_DIFFICULTY, targetsForBand, ti
   }
 }
 
+// ---- 听 / 说：只有 G3 两步指令是听者反应，其余都要求开口 ----
+{
+  const byId = new Map(EXPRESSION_TARGETS.map((t) => [t.id, t]));
+  assert.equal(byId.get('G3').modality, 'receptive', 'G3 是听者反应');
+  const receptive = EXPRESSION_TARGETS.filter((t) => t.modality === 'receptive');
+  assert.equal(receptive.length, 1, '目前只应有一条听者反应目标');
+  for (const t of EXPRESSION_TARGETS) {
+    assert.ok(['receptive', 'expressive'].includes(t.modality), `${t.id} 的 modality 不合法`);
+    if (t.id !== 'G3') assert.equal(t.modality, 'expressive', `${t.id} 应该是表达类`);
+  }
+  assert.equal(mod.MODALITY_LABEL.receptive, '听');
+  assert.equal(mod.MODALITY_LABEL.expressive, '说');
+  assert.equal(mod.isReceptive(byId.get('G3')), true);
+  assert.equal(mod.isReceptive(byId.get('G2')), false);
+}
+
 // ---- 每个目标都要能对上 VB-MAPP，否则没法跟老师说清「为什么现在练这个」 ----
 {
   for (const t of EXPRESSION_TARGETS_BY_DIFFICULTY) {
