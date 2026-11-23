@@ -3,7 +3,6 @@ import { invoke } from '@tauri-apps/api/core';
 import { CheckCircle2, ChevronDown, Eye, EyeOff, KeyRound, Volume2 } from 'lucide-react';
 import { kidGames } from '@/config/aiGame';
 import { KID_COMPANION_IDS, builtinAIMembers, companionMeta } from '@/config/aiMembers';
-import { ENGLISH_BUDDY } from '@/config/kidEnglish';
 import { loadKidModel, saveKidModel } from '@/config/kidModel';
 import { providerPresets, type Provider } from '@/config/providers';
 import {
@@ -771,35 +770,6 @@ export default function SetupTab() {
                       </div>
                     );
                   })}
-                  {(() => {
-                    const sunnyId = ENGLISH_BUDDY.id;
-                    const val = customVoice(speechConfig, sunnyId);
-                    const fallback = inheritedVoice(speechConfig, sunnyId);
-                    return (
-                      <div key={sunnyId} className="flex flex-wrap items-center gap-2">
-                        <span className="w-36 shrink-0 text-xs font-semibold text-slate-700">
-                          {ENGLISH_BUDDY.emoji} {ENGLISH_BUDDY.name}（英语）
-                        </span>
-                        <input
-                          list={`voice-list-${speechConfig.tts.model}`}
-                          value={val}
-                          onChange={(e) => updateSpeech((prev) => withCustomVoice(prev, sunnyId, e.target.value))}
-                          placeholder={`默认：${fallback}`}
-                          className="h-8 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-700 outline-none focus:border-orange-400"
-                        />
-                        <button
-                          type="button"
-                          disabled={Boolean(previewing)}
-                          onClick={() =>
-                            previewVoice(sunnyId, "Hi friend! I'm Sunny. Let's speak English together!", voiceForSpeaker(speechConfig, sunnyId))
-                          }
-                          className="h-8 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-100"
-                        >
-                          {previewing === sunnyId ? '合成中…' : '试听'}
-                        </button>
-                      </div>
-                    );
-                  })()}
                   {MODULE_VOICE_ENTRIES.map((mod) => {
                     const val = customVoice(speechConfig, mod.key);
                     return (
@@ -887,20 +857,6 @@ export default function SetupTab() {
                       />
                     </div>
                   ))}
-                  <div className="flex items-center gap-2">
-                    <span className="w-36 shrink-0 text-xs font-semibold text-slate-700">
-                      {ENGLISH_BUDDY.emoji} {ENGLISH_BUDDY.name}（英语）
-                    </span>
-                    <input
-                      list="voice-list-dialog"
-                      value={customVoice(speechConfig, ENGLISH_BUDDY.id, speechConfig.dialog.model)}
-                      onChange={(e) =>
-                        updateSpeech((prev) => withCustomVoice(prev, ENGLISH_BUDDY.id, e.target.value, prev.dialog.model))
-                      }
-                      placeholder={`默认：${dialogCatalog.companions[ENGLISH_BUDDY.id] || dialogCatalog.fallback}`}
-                      className="h-8 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-700 outline-none focus:border-orange-400"
-                    />
-                  </div>
                   <datalist id="voice-list-dialog">
                     {dialogCatalog.options.map((o) => (
                       <option key={o.value} value={o.value}>{o.label}</option>

@@ -18,14 +18,21 @@ const routes = await read('../../routes.tsx');
 assert.match(routes, /path: '\/',\s*element: <KidLayout \/>/);
 assert.match(routes, /index: true, element: <KidHome \/>/);
 assert.match(routes, /path: 'draw'/);
-assert.match(routes, /path: 'english'/);
-assert.match(routes, /path: 'english\/:sceneId'/);
 assert.match(routes, /path: 'books'/);
 assert.match(routes, /path: 'books\/new'/);
 assert.match(routes, /path: 'books\/:bookId'/);
 assert.match(routes, /path: '\/parent'/);
 assert.match(routes, /<ParentArea \/>/);
 assert.doesNotMatch(routes, /path: '',\s*element: <Chat \/>/, 'adult chat is completely removed');
+// 英语岛模块整体下线：路由、页面、导航、首页卡片都不该再提到它
+assert.doesNotMatch(routes, /english/i, '英语岛路由已移除');
+await assert.rejects(access(new URL('./KidEnglish.tsx', import.meta.url)), { code: 'ENOENT' }, 'KidEnglish.tsx 已删除');
+await assert.rejects(access(new URL('./KidEnglishPlay.tsx', import.meta.url)), { code: 'ENOENT' }, 'KidEnglishPlay.tsx 已删除');
+
+const kidLayout = await read('./KidLayout.tsx');
+assert.doesNotMatch(kidLayout, /english/i, '底部导航不再有英语岛');
+const kidHome = await read('./KidHome.tsx');
+assert.doesNotMatch(kidHome, /english/i, '首页不再有英语岛入口');
 
 // 旧版成人角色群聊目录已彻底移除
 await assert.rejects(access(new URL('../chat/', import.meta.url)), { code: 'ENOENT' }, 'src/pages/chat must be deleted');

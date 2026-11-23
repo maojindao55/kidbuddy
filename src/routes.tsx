@@ -4,8 +4,6 @@ import KidLayout from './pages/kid/KidLayout';
 import KidHome from './pages/kid/KidHome';
 import KidChat from './pages/kid/KidChat';
 import KidDraw from './pages/kid/KidDraw';
-import KidEnglish from './pages/kid/KidEnglish';
-import KidEnglishPlay from './pages/kid/KidEnglishPlay';
 import KidExpression from './pages/kid/KidExpression';
 import KidExpressionPlay from './pages/kid/KidExpressionPlay';
 import KidStorybooks from './pages/kid/KidStorybooks';
@@ -24,8 +22,6 @@ export const router = createBrowserRouter([
       { index: true, element: <KidHome /> },
       { path: 'chat/:chatId', element: <KidChat /> },
       { path: 'draw', element: <KidDraw /> },
-      { path: 'english', element: <KidEnglish /> },
-      { path: 'english/:sceneId', element: <KidEnglishPlay /> },
       { path: 'expression', element: <KidExpression /> },
       { path: 'expression/:targetId', element: <KidExpressionPlay /> },
       { path: 'books', element: <KidStorybooks /> },
