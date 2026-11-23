@@ -1,0 +1,219 @@
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { EXPRESSION_TARGETS, type ExpressionTarget } from '@/config/expressionTargets';
+import {
+  SCORE_LABEL,
+  STABILITY_LABEL,
+  historyLine,
+  loadBook,
+  nextSessionNo,
+  sessionsOf,
+  targetStat,
+  type ExpressionBook,
+  type ExpressionSession,
+  type ExpressionSubject,
+  type StabilityStatus,
+} from '@/config/kidExpression';
+import { RecordExportSheet } from './components/RecordExportSheet';
+import { useKid } from './KidContext';
+
+const STUDENT_KEY = 'kidbuddy.expression.student';
+const SUBJECT_KEY = 'kidbuddy.expression.by';
+
+function readStudent(fallback: string): string {
+  try {
+    return localStorage.getItem(STUDENT_KEY) || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function readSubject(): ExpressionSubject {
+  try {
+    return localStorage.getItem(SUBJECT_KEY) === '家长' ? '家长' : '教师';
+  } catch {
+    return '教师';
+  }
+}
+
+const statusStyle: Record<StabilityStatus, string> = {
+  none: 'bg-slate-100 text-slate-500',
+  progressing: 'bg-sky-100 text-sky-700',
+  pending: 'bg-amber-100 text-amber-700',
+  stable: 'bg-emerald-100 text-emerald-700',
+};
+
+function ScoreChip({ score }: { score: number | null }) {
+  if (score === null) return <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-500">未打分</span>;
+  const color = score === 2 ? 'bg-emerald-100 text-emerald-700' : score === 1 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700';
+  return <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${color}`}>{score} 分 · {SCORE_LABEL[score as 0 | 1 | 2]}</span>;
+}
+
+function TargetCard({ target, book, student }: { target: ExpressionTarget; book: ExpressionBook; student: string }) {
+  const stat = targetStat(book, student, target.id);
+  return (
+    <Link
+      to={`/expression/${target.id}`}
+      data-testid={`expression-target-${target.id}`}
+      className="flex flex-col gap-2.5 rounded-[28px] border-4 border-rose-100 bg-white p-4 shadow-md transition active:scale-[0.98]"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="rounded-lg bg-rose-100 px-2 py-0.5 text-xs font-extrabold text-rose-700">{target.id}</span>
+            <span className="text-lg font-extrabold text-slate-800">{target.name}</span>
+          </div>
+          <p className="mt-1 text-sm leading-snug text-slate-500">{target.summary}</p>
+        </div>
+        <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${statusStyle[stat.status]}`}>
+          {STABILITY_LABEL[stat.status]}
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <ScoreChip score={stat.last} />
+        <span className="text-xs text-slate-400">已练 {stat.attempts} 次</span>
+      </div>
+      <div className="rounded-xl bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-500">{historyLine(stat)}</div>
+      <div className="mt-auto flex items-start justify-between gap-2 pt-1">
+        <span className="line-clamp-2 min-w-0 flex-1 text-xs leading-snug text-slate-400">2 分标准：{target.standard2}</span>
+        <span className="shrink-0 rounded-full bg-rose-50 px-3 py-1 text-xs font-bold text-rose-600">开始 →</span>
+      </div>
+    </Link>
+  );
+}
+
+export default function KidExpression() {
+  const { memory } = useKid();
+  const [book] = useState<ExpressionBook>(loadBook);
+  const [student, setStudent] = useState(() => readStudent(memory.nickname || '小朋友'));
+  const [subject, setSubject] = useState<ExpressionSubject>(readSubject);
+  const [exporting, setExporting] = useState<ExpressionSession | null>(null);
+
+  const mine = sessionsOf(book, student);
+  const stableCount = EXPRESSION_TARGETS.filter((t) => targetStat(book, student, t.id).status === 'stable').length;
+  const pendingCount = EXPRESSION_TARGETS.filter((t) => targetStat(book, student, t.id).status === 'pending').length;
+
+  const changeStudent = (value: string) => {
+    setStudent(value);
+    try {
+      localStorage.setItem(STUDENT_KEY, value);
+    } catch {
+      /* 忽略 */
+    }
+  };
+
+  const changeSubject = (value: ExpressionSubject) => {
+    setSubject(value);
+    try {
+      localStorage.setItem(SUBJECT_KEY, value);
+    } catch {
+      /* 忽略 */
+    }
+  };
+
+  return (
+    <div className="flex-1 overflow-y-auto px-5 pb-8 pt-2" data-testid="kid-expression-page">
+      <div className="mx-auto max-w-5xl space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-[32px] bg-gradient-to-r from-rose-400 to-orange-400 p-6 text-white shadow-lg">
+          <div className="flex items-center gap-4">
+            <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-4xl" aria-hidden>🗣️</span>
+            <div>
+              <h1 className="text-3xl font-extrabold">说说小课堂</h1>
+              <p className="mt-1 text-base opacity-95">练语言表达：说清一件事、复述通知、开口求助——每次练完留一份可统计的记录。</p>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <div className="rounded-2xl bg-white/20 px-4 py-2 text-center">
+              <div className="text-2xl font-extrabold">{mine.length}</div>
+              <div className="text-xs opacity-90">已记录课时</div>
+            </div>
+            <div className="rounded-2xl bg-white/20 px-4 py-2 text-center">
+              <div className="text-2xl font-extrabold">{stableCount}</div>
+              <div className="text-xs opacity-90">已稳定目标</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 rounded-[28px] bg-white p-4 shadow-sm">
+          <label className="flex items-center gap-2 text-sm font-bold text-slate-600">
+            孩子
+            <input
+              value={student}
+              onChange={(e) => changeStudent(e.target.value)}
+              data-testid="expression-student"
+              className="h-12 w-36 rounded-xl border-2 border-slate-200 px-3 text-base font-bold text-slate-800 outline-none focus:border-rose-400"
+            />
+          </label>
+          <div className="flex items-center gap-2 text-sm font-bold text-slate-600">
+            这节课谁带
+            <div className="flex overflow-hidden rounded-xl border-2 border-slate-200">
+              {(['教师', '家长'] as ExpressionSubject[]).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  data-testid={`expression-subject-${v}`}
+                  onClick={() => changeSubject(v)}
+                  className={`h-12 px-4 text-sm font-bold ${subject === v ? 'bg-rose-500 text-white' : 'bg-white text-slate-500'}`}
+                >
+                  {v === '教师' ? '老师带' : '家长带'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <span className="text-xs text-slate-400">
+            下一节是第 {nextSessionNo(book, student)} 课时（同一孩子连续编号，跨天不重置）
+          </span>
+        </div>
+
+        {pendingCount > 0 && (
+          <div className="rounded-2xl border-2 border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-800">
+            ⚠️ 有 {pendingCount} 个目标是「待复核」：最近两次都是 2 分，但一次教师课、一次家长课。
+            需要一节教师课复测，才能算稳定。
+          </div>
+        )}
+
+        <div>
+          <h2 className="mb-3 text-xl font-extrabold text-slate-800">选一个目标开始练</h2>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {EXPRESSION_TARGETS.map((t) => (
+              <TargetCard key={t.id} target={t} book={book} student={student} />
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-[32px] bg-white/90 p-5 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-xl font-extrabold text-slate-800">📋 课时记录（{mine.length}）</h2>
+            <span className="text-xs text-slate-400">点「导出」拿到可并入上课记录的 .md</span>
+          </div>
+          {mine.length === 0 ? (
+            <p className="py-6 text-center text-base text-slate-400">还没有记录。挑一个目标，和孩子练完一轮就会自动生成。</p>
+          ) : (
+            <div className="space-y-2">
+              {mine
+                .slice()
+                .reverse()
+                .map((s) => (
+                  <div key={s.id} className="flex flex-wrap items-center gap-3 rounded-2xl border-2 border-slate-100 p-3">
+                    <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">第{s.sessionNo}课时</span>
+                    <span className="text-sm font-bold text-slate-700">{s.date} · {s.topic}</span>
+                    <span className="rounded-full bg-rose-50 px-2 py-0.5 text-xs font-bold text-rose-600">{s.targetId}</span>
+                    <span className="rounded-full bg-slate-50 px-2 py-0.5 text-xs font-bold text-slate-500">{s.by}</span>
+                    <ScoreChip score={s.score} />
+                    <button
+                      type="button"
+                      onClick={() => setExporting(s)}
+                      className="ml-auto h-12 rounded-xl bg-slate-800 px-4 text-xs font-bold text-white"
+                    >
+                      导出
+                    </button>
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
+      </div>
+      {exporting && <RecordExportSheet session={exporting} onClose={() => setExporting(null)} />}
+    </div>
+  );
+}

@@ -113,14 +113,14 @@ function KidShell() {
     >
       <header className="flex shrink-0 items-center gap-3 px-4 pb-2 pt-[max(12px,env(safe-area-inset-top))]">
         <ParentCornerBadge />
-        <nav className="flex flex-1 justify-center gap-2" aria-label="儿童导航">
+        <nav className="flex min-w-0 flex-1 justify-center gap-2 overflow-x-auto" aria-label="儿童导航">
           {navItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               end={item.end}
               className={({ isActive }) =>
-                `flex min-h-14 items-center gap-1.5 rounded-full px-3.5 text-base font-bold transition lg:px-4 lg:text-lg ${
+                `flex min-h-14 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-base font-bold transition lg:px-4 lg:text-lg ${
                   isActive ? 'bg-amber-400 text-white shadow-md' : 'bg-white/70 text-slate-600'
                 }`
               }
