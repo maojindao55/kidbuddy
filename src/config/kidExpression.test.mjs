@@ -26,10 +26,10 @@ function installLocalStorage() {
 installLocalStorage();
 
 const targetsUrl = toDataUrl(await readFile(new URL('./expressionTargets.ts', import.meta.url), 'utf8'));
-const source = (await readFile(new URL('./kidExpression.ts', import.meta.url), 'utf8')).replace(
-  "from './expressionTargets'",
-  `from '${targetsUrl}'`,
-);
+const dttUrl = toDataUrl(await readFile(new URL('./dtt.ts', import.meta.url), 'utf8'));
+const source = (await readFile(new URL('./kidExpression.ts', import.meta.url), 'utf8'))
+  .replace("from './expressionTargets'", `from '${targetsUrl}'`)
+  .replace("from './dtt'", `from '${dttUrl}'`);
 const mod = await import(toDataUrl(source));
 const targets = await import(targetsUrl);
 
@@ -193,13 +193,13 @@ const session = (over) => ({
     round('failed', ''),
   ];
   const three = mod.composeThreeLines({ rounds, targetId: 'K1', by: '教师' }, targets.getExpressionTarget('K1'));
-  assert.match(three.achieved, /独立做到 1 轮、提示后做到 1 轮、没做到 1 轮/);
+  assert.match(three.achieved, /3 试次中，独立做到 1 次、提示后做到 1 次、没做到 1 次/);
   assert.match(three.achieved, /独立完成率 33%/);
   assert.match(three.stuck, /卡在/);
   assert.doesNotMatch(three.achieved, /不错|较弱|表现好/);
 
   const clean = mod.composeThreeLines({ rounds: [round('independent', 'a')], targetId: 'K1', by: '教师' }, targets.getExpressionTarget('K1'));
-  assert.match(clean.stuck, /未出现明显卡点/);
+  assert.match(clean.stuck, /未记录到明显卡点/);
 }
 
 // ---- 三行不能把「没做的轮次」算成做了 ----
@@ -210,8 +210,8 @@ const session = (over) => ({
     round(null, ''),
   ];
   const none = mod.composeThreeLines({ rounds: blank, targetId: 'K4', by: '教师' }, target);
-  assert.match(none.did, /计划 2 轮，本节没有作答/);
-  assert.match(none.achieved, /未逐轮判定/);
+  assert.match(none.did, /DTT 计划 2 试次，本节没有判定/);
+  assert.match(none.achieved, /按 DTT 口径不打分/);
   assert.match(none.stuck, /卡点没有记录/);
 
   const partial = [
@@ -220,8 +220,8 @@ const session = (over) => ({
     round(null, ''),
   ];
   const p = mod.composeThreeLines({ rounds: partial, targetId: 'K4', by: '教师' }, target);
-  assert.match(p.did, /计划 3 轮，实际作答 1 轮/);
-  assert.match(p.achieved, /实际作答 1 轮，未逐轮判定，本课不打分/);
+  assert.match(p.did, /DTT 计划 3 试次，本节没有判定/);
+  assert.match(p.achieved, /本节未判定，按 DTT 口径不打分/);
 }
 
 // ---- 原话优先取独立完成的第一句，没有就取最长的 ----
@@ -253,6 +253,28 @@ const session = (over) => ({
 {
   assert.equal(mod.todayIso(new Date(2026, 10, 24, 0, 30)), '2026-11-24');
   assert.equal(mod.todayIso(new Date(2026, 0, 5, 23, 59)), '2026-01-05');
+}
+
+// ---- DTT 数据进导出：试次统计与逐试次记录 ----
+{
+  const rounds = [
+    { taskId: 'K4-t1#1', ask: '听好，我说一遍', answer: '明天九点', checks: [], checksHit: [], achievement: 'independent', outcome: 'correct', promptLevel: 'independent', repeatIndex: 1 },
+    { taskId: 'K4-t1#2', ask: '听好，我说一遍', answer: '带水彩笔', checks: [], checksHit: [], achievement: 'prompted', outcome: 'correct', promptLevel: 'verbal', repeatIndex: 2 },
+    { taskId: 'K4-t2#1', ask: '下午三点操场', answer: '', checks: [], checksHit: [], achievement: 'failed', outcome: 'no_response', promptLevel: null, repeatIndex: 1 },
+  ];
+  const md = mod.buildSessionMarkdown(session({ rounds, score: 1, targetId: 'K4' }));
+  assert.match(md, /共 3 试次/);
+  assert.match(md, /独立正确 1、口头提示后 1、示范后 0、手把手后 0、错误 0、无反应 1/);
+  assert.match(md, /独立正确率 33%/);
+  assert.match(md, /最长连续独立正确 1 次/);
+  assert.match(md, /逐试次：1\.✅独立「明天九点」/);
+  assert.match(md, /2\.🟡口头/);
+  assert.match(md, /3\.❌无反应/);
+
+  const three = mod.composeThreeLines({ rounds, targetId: 'K4', by: '教师' }, targets.getExpressionTarget('K4'));
+  assert.match(three.achieved, /独立正确 1（33%）/);
+  assert.match(three.achieved, /最长连续独立正确 1 次/);
+  assert.match(three.stuck, /等 3 秒无反应/);
 }
 
 console.log('PASS kidExpression');

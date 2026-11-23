@@ -9,6 +9,7 @@
  * 零外部运行时依赖（仅 localStorage），便于 node 直接 transpile 单测。
  */
 import { EXPRESSION_TARGETS, getExpressionTarget, type ExpressionTarget } from './expressionTargets';
+import { computeDttStats, type DttOutcome, type DttPromptLevel, type DttTrial } from './dtt';
 
 export type ExpressionSubject = '教师' | '家长';
 export type Achievement = 'independent' | 'prompted' | 'failed';
@@ -24,6 +25,12 @@ export interface ExpressionRound {
   checks: string[];
   checksHit: string[];
   achievement: Achievement | null;
+  /** DTT：本试次结果，旧记录没有这两个字段 */
+  outcome?: DttOutcome | null;
+  /** DTT：本试次用的最高辅助等级 */
+  promptLevel?: DttPromptLevel | null;
+  /** DTT：同一道题的第几遍（从 1 开始） */
+  repeatIndex?: number;
 }
 
 export interface ExpressionSession {
@@ -96,6 +103,12 @@ export function normalizeBook(raw: unknown): ExpressionBook {
             checks: Array.isArray(r?.checks) ? r.checks.map(String) : [],
             checksHit: Array.isArray(r?.checksHit) ? r.checksHit.map(String) : [],
             achievement: r?.achievement === 'independent' || r?.achievement === 'prompted' || r?.achievement === 'failed' ? r.achievement : null,
+            outcome: r?.outcome === 'correct' || r?.outcome === 'incorrect' || r?.outcome === 'no_response' ? r.outcome : null,
+            promptLevel:
+              r?.promptLevel === 'independent' || r?.promptLevel === 'verbal' || r?.promptLevel === 'model' || r?.promptLevel === 'physical'
+                ? r.promptLevel
+                : null,
+            repeatIndex: Number(r?.repeatIndex) || 1,
           }))
         : [],
       score: s.score === 0 || s.score === 1 || s.score === 2 ? s.score : null,
@@ -234,41 +247,48 @@ export function historyLine(stat: TargetStat): string {
     : `${stat.targetId}：${chain}`;
 }
 
-/** 三行记录草稿：只用已发生的轮次与判定，不写评价词 */
+/** 三行记录草稿：只用已发生的试次与判定，不写评价词 */
 export function composeThreeLines(
   session: Pick<ExpressionSession, 'rounds' | 'targetId' | 'by'>,
   target: ExpressionTarget,
 ): { did: string; achieved: string; stuck: string } {
   const total = session.rounds.length;
-  const answered = session.rounds.filter((r) => r.answer.trim());
+  const judgedRounds = session.rounds.filter((r) => r.achievement !== null);
+  const judged = judgedRounds.length;
+  const hasDtt = session.rounds.some((r) => r.outcome);
   const counted = countAchievements(session.rounds);
-  const judged = counted.independent + counted.prompted + counted.failed;
 
-  const answeredList = session.rounds
-    .map((r, i) => (r.answer.trim() ? `${i + 1}.${r.ask.replace(/[。？]$/, '')}` : null))
-    .filter(Boolean)
-    .join('；');
+  const uniqueAsks = Array.from(new Set(session.rounds.map((r) => r.ask.replace(/[。？]$/, ''))));
 
   const did =
-    answered.length === 0
-      ? `${target.id} ${target.name}，计划 ${total} 轮，本节没有作答。`
-      : `${target.id} ${target.name}，计划 ${total} 轮，实际作答 ${answered.length} 轮：${answeredList}。`;
-
-  const achieved =
     judged === 0
-      ? `实际作答 ${answered.length} 轮，未逐轮判定，本课不打分。`
-      : `${judged} 轮判定中，独立做到 ${counted.independent} 轮、提示后做到 ${counted.prompted} 轮、没做到 ${counted.failed} 轮；独立完成率 ${Math.round(
-          (counted.independent / judged) * 100,
-        )}%。`;
+      ? `${target.id} ${target.name}，DTT 计划 ${total} 试次，本节没有判定。`
+      : `${target.id} ${target.name}，DTT 计划 ${total} 试次、已判定 ${judged} 试次；题目：${uniqueAsks.join('／')}。`;
 
-  const stuckRounds = session.rounds.filter((r) => r.achievement === 'failed' || r.achievement === 'prompted');
+  let achieved: string;
+  if (judged === 0) {
+    achieved = '本节未判定，按 DTT 口径不打分。';
+  } else if (hasDtt) {
+    const stats = computeDttStats(session.rounds.map((r) => ({ outcome: r.outcome ?? null, promptLevel: r.promptLevel ?? null })));
+    achieved = `${judged} 试次中：独立正确 ${stats.independentCorrect}（${Math.round(stats.independentRate * 100)}%）、口头提示后正确 ${
+      stats.correctByPrompt.verbal
+    }、示范后正确 ${stats.correctByPrompt.model}、手把手后正确 ${stats.correctByPrompt.physical}、错误 ${stats.incorrect}、无反应 ${
+      stats.noResponse
+    }；最长连续独立正确 ${stats.maxIndependentStreak} 次。`;
+  } else {
+    achieved = `${judged} 试次中，独立做到 ${counted.independent} 次、提示后做到 ${counted.prompted} 次、没做到 ${counted.failed} 次；独立完成率 ${Math.round(
+      (counted.independent / judged) * 100,
+    )}%。`;
+  }
+
+  const failedRounds = session.rounds.filter((r) => r.achievement === 'failed');
   const stuck =
     judged === 0
-      ? '未逐轮判定，卡点没有记录；下节课补一次判定再定方向。'
-      : stuckRounds.length === 0
-        ? '本次各轮均独立完成，未出现明显卡点；下节课按加难方向推进。'
-        : `卡在：${stuckRounds
-            .map((r) => `「${r.ask.replace(/[。？]$/, '')}」（${r.achievement === 'failed' ? '没做到' : '提示后才做到'}）`)
+      ? '未判定，卡点没有记录；下节课补一次判定再定方向。'
+      : failedRounds.length === 0
+        ? '本次试次没有出现错误或走神，未记录到明显卡点；下节课按褪除辅助的方向推进。'
+        : `卡在：${failedRounds
+            .map((r) => `「${r.ask.replace(/[。？]$/, '')}」（${r.outcome === 'no_response' ? '等 3 秒无反应' : '错误'}）`)
             .join('；')}。`;
 
   return { did, achieved, stuck };
@@ -290,14 +310,47 @@ export function sessionFileName(session: Pick<ExpressionSession, 'student' | 'da
 }
 
 function achievementEvidence(rounds: ExpressionRound[]): string {
-  return rounds
+  const hasDtt = rounds.some((r) => r.outcome);
+  if (!hasDtt) {
+    return rounds
+      .map((r, i) => {
+        const verdict = r.achievement ? ACHIEVEMENT_LABEL[r.achievement] : '未判定';
+        const hit = r.checksHit.length > 0 ? `，要素命中：${r.checksHit.join('、')}` : '';
+        const answer = r.answer.trim() ? `原话「${r.answer.trim()}」` : '未作答';
+        return `第${i + 1}轮（${verdict}${hit}）：${answer}`;
+      })
+      .join('；');
+  }
+
+  const stats = computeDttStats(rounds.map((r) => ({ outcome: r.outcome ?? null, promptLevel: r.promptLevel ?? null })));
+  const chain = rounds
     .map((r, i) => {
-      const verdict = r.achievement ? ACHIEVEMENT_LABEL[r.achievement] : '未判定';
-      const hit = r.checksHit.length > 0 ? `，要素命中：${r.checksHit.join('、')}` : '';
-      const answer = r.answer.trim() ? `原话「${r.answer.trim()}」` : '未作答';
-      return `第${i + 1}轮（${verdict}${hit}）：${answer}`;
+      const mark =
+        r.outcome === 'correct'
+          ? r.promptLevel === 'independent'
+            ? '✅独立'
+            : `🟡${promptShort(r.promptLevel)}`
+          : r.outcome === 'incorrect'
+            ? '❌错误'
+            : '❌无反应';
+      const answer = r.answer.trim() ? `「${r.answer.trim()}」` : '';
+      return `${i + 1}.${mark}${answer}`;
     })
     .join('；');
+
+  const summary = `共 ${stats.total} 试次：独立正确 ${stats.independentCorrect}、口头提示后 ${stats.correctByPrompt.verbal}、示范后 ${
+    stats.correctByPrompt.model
+  }、手把手后 ${stats.correctByPrompt.physical}、错误 ${stats.incorrect}、无反应 ${stats.noResponse}；独立正确率 ${Math.round(
+    stats.independentRate * 100,
+  )}%；最长连续独立正确 ${stats.maxIndependentStreak} 次`;
+  return `${summary}。逐试次：${chain}`;
+}
+
+function promptShort(level: DttPromptLevel | null | undefined): string {
+  if (level === 'verbal') return '口头';
+  if (level === 'model') return '示范';
+  if (level === 'physical') return '手把手';
+  return '独立';
 }
 
 function familyGuideSection(target: ExpressionTarget): string {
