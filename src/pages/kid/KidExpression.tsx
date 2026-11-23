@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { lockLessonArea } from '@/config/lessonGate';
 import {
   EXPRESSION_STAGES,
   EXPRESSION_TARGETS_BY_STAGE,
@@ -153,6 +154,7 @@ function TargetCard({
 }
 
 export default function KidExpression() {
+  const navigate = useNavigate();
   const { memory } = useKid();
   const [book] = useState<ExpressionBook>(loadBook);
   const [student, setStudent] = useState(() => readStudent(memory.nickname || '小朋友'));
@@ -218,6 +220,19 @@ export default function KidExpression() {
               <div className="text-2xl font-extrabold">{stableCount}</div>
               <div className="text-xs opacity-90">已稳定目标</div>
             </div>
+            <button
+              type="button"
+              data-testid="lock-lesson"
+              title="锁定课堂入口，孩子需要重新验证才能进来"
+              onClick={() => {
+                lockLessonArea();
+                navigate('/');
+              }}
+              className="flex h-14 items-center gap-1.5 rounded-2xl bg-white/20 px-4 text-sm font-bold text-white transition active:scale-[0.98]"
+            >
+              <span aria-hidden>🔒</span>
+              结束课堂
+            </button>
           </div>
         </div>
 

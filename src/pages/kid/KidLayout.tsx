@@ -7,7 +7,6 @@ import { ParentCornerBadge, ParentGateDialog } from './components/ParentGate';
 const navItems = [
   { to: '/', label: '小伙伴', emoji: '🏠', end: true },
   { to: '/books', label: '绘本屋', emoji: '📖', end: false },
-  { to: '/expression', label: '说说小课堂', emoji: '💬', end: false },
   { to: '/draw', label: '魔法画室', emoji: '🎨', end: false },
   { to: '/games', label: '小游戏', emoji: '🎲', end: false },
   { to: '/stars', label: '我的星星', emoji: '⭐', end: false },

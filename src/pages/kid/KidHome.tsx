@@ -1,15 +1,23 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { unlockParentArea } from '@/config/parentGate';
+import { isLessonAreaUnlocked, lessonUnlockLeftMinutes, unlockLessonArea } from '@/config/lessonGate';
 import { useKid } from './KidContext';
 import { CompanionAvatar } from './components/ChatBubble';
-import { ParentGateDialog } from './components/ParentGate';
+import { LongPressRing, ParentGateDialog, useLongPress } from './components/ParentGate';
 import { PLAYGROUND_CHAT_ID } from './kidRoutes';
 
 export default function KidHome() {
   const navigate = useNavigate();
   const { companions, companionsLoading, memory, aiConfigured, aiConfigChecked } = useKid();
   const [gateOpen, setGateOpen] = useState(false);
+  const [lessonGateOpen, setLessonGateOpen] = useState(false);
+  const lessonUnlocked = isLessonAreaUnlocked();
+  const lessonLeft = lessonUnlockLeftMinutes();
+  // 已经解锁时单击直接进；没解锁时长按 1.5 秒才弹验证
+  const lessonPress = useLongPress(() => {
+    if (!isLessonAreaUnlocked()) setLessonGateOpen(true);
+  });
   const name = memory.nickname || '小朋友';
 
   return (
@@ -75,20 +83,48 @@ export default function KidHome() {
           <span className="text-2xl font-extrabold" aria-hidden>→</span>
         </Link>
 
-        <Link
-          to="/expression"
+        <button
+          type="button"
           data-testid="expression-card"
-          className="flex items-center gap-3 rounded-[32px] bg-gradient-to-r from-rose-400 to-orange-400 p-5 text-white shadow-lg transition active:scale-[0.99]"
+          aria-label="说说小课堂（长按 1.5 秒，需家长或老师验证）"
+          title="长按 1.5 秒进入 · 需家长或老师验证"
+          onContextMenu={(e) => e.preventDefault()}
+          style={{ touchAction: 'none', WebkitTouchCallout: 'none' }}
+          onPointerDown={lessonPress.start}
+          onPointerUp={lessonPress.cancel}
+          onPointerLeave={lessonPress.cancel}
+          onPointerCancel={lessonPress.cancel}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              if (isLessonAreaUnlocked()) navigate('/expression');
+              else setLessonGateOpen(true);
+            }
+          }}
+          onClick={() => {
+            if (isLessonAreaUnlocked()) navigate('/expression');
+          }}
+          className="relative flex min-h-14 select-none items-center gap-3 overflow-hidden rounded-[32px] bg-gradient-to-r from-rose-400 to-orange-400 p-5 text-left text-white shadow-lg transition active:scale-[0.99]"
         >
           <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-3xl" aria-hidden>
             💬
           </span>
           <div className="min-w-0 flex-1">
-            <div className="text-xl font-extrabold">说说小课堂</div>
-            <div className="text-sm opacity-95">练语言表达，留下记录</div>
+            <div className="flex items-center gap-1.5 text-xl font-extrabold">
+              说说小课堂
+              <span className="text-base" aria-hidden>{lessonUnlocked ? '🔓' : '🔒'}</span>
+            </div>
+            <div className="text-sm opacity-95">
+              {lessonPress.pressing
+                ? '别松手，马上到验证…'
+                : lessonUnlocked
+                  ? `老师模式 · 还剩 ${lessonLeft} 分钟`
+                  : '老师带练 · 长按 1.5 秒进入'}
+            </div>
           </div>
           <span className="text-2xl font-extrabold" aria-hidden>→</span>
-        </Link>
+          <LongPressRing pressing={lessonPress.pressing} className="rounded-[32px]" />
+        </button>
       </div>
 
       <Link
@@ -156,6 +192,19 @@ export default function KidHome() {
             unlockParentArea();
             setGateOpen(false);
             navigate('/parent');
+          }}
+        />
+      )}
+
+      {lessonGateOpen && (
+        <ParentGateDialog
+          title="课堂入口验证"
+          description="说说小课堂是老师带孩子练的训练台，请家长或老师验证后进入。验证后 30 分钟内不用再验证。"
+          onClose={() => setLessonGateOpen(false)}
+          onSuccess={() => {
+            unlockLessonArea();
+            setLessonGateOpen(false);
+            navigate('/expression');
           }}
         />
       )}

@@ -12,6 +12,7 @@ import KidStorybookRead from './pages/kid/KidStorybookRead';
 import { KidGameLevels, KidGameList } from './pages/kid/KidGames';
 import KidGamePlay from './pages/kid/KidGamePlay';
 import KidStars from './pages/kid/KidStars';
+import { LessonGuard } from './pages/kid/components/ParentGate';
 import ParentArea from './pages/parent';
 
 export const router = createBrowserRouter([
@@ -22,8 +23,8 @@ export const router = createBrowserRouter([
       { index: true, element: <KidHome /> },
       { path: 'chat/:chatId', element: <KidChat /> },
       { path: 'draw', element: <KidDraw /> },
-      { path: 'expression', element: <KidExpression /> },
-      { path: 'expression/:targetId', element: <KidExpressionPlay /> },
+      { path: 'expression', element: <LessonGuard><KidExpression /></LessonGuard> },
+      { path: 'expression/:targetId', element: <LessonGuard><KidExpressionPlay /></LessonGuard> },
       { path: 'books', element: <KidStorybooks /> },
       { path: 'books/new', element: <KidStorybookCreate /> },
       { path: 'books/:bookId', element: <KidStorybookRead /> },

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Navigate, useNavigate } from 'react-router-dom';
 import {
   checkChallengeAnswer,
   createArithmeticChallenge,
@@ -7,24 +7,55 @@ import {
   unlockParentArea,
   verifyParentPin,
 } from '@/config/parentGate';
+import { isLessonAreaUnlocked } from '@/config/lessonGate';
 
 export const LONG_PRESS_MS = 1500;
 /** 角标下的小字必须写「长按」，否则家长只会点一下，点了没反应就以为坏了 */
 const BADGE_LABEL = '长按';
 
+/** 长按到时间才触发；松手、移出、取消都会中断。pressing 用来画进度环 */
+export function useLongPress(onComplete: () => void, ms: number = LONG_PRESS_MS) {
+  const [pressing, setPressing] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const cancel = useCallback(() => {
+    clearTimeout(timer.current);
+    setPressing(false);
+  }, []);
+
+  const start = useCallback(() => {
+    setPressing(true);
+    timer.current = setTimeout(() => {
+      setPressing(false);
+      onComplete();
+    }, ms);
+  }, [ms, onComplete]);
+
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  return { pressing, start, cancel };
+}
+
+/** 长按进度环：按住时金色边框 1.5 秒内由小变大 */
+export function LongPressRing({ pressing, className = 'rounded-2xl' }: { pressing: boolean; className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={`pointer-events-none absolute inset-0 border-4 border-amber-400 ${className}`}
+      style={{
+        opacity: pressing ? 1 : 0,
+        transform: pressing ? 'scale(1)' : 'scale(0.6)',
+        transition: pressing ? `all ${LONG_PRESS_MS}ms linear` : 'all 150ms ease-out',
+      }}
+    />
+  );
+}
+
 /** 左上角的彩虹角标：长按 1.5 秒弹出家长验证，防止孩子误触，验证通过后进入家长中心 */
 export function ParentCornerBadge() {
   const navigate = useNavigate();
-  const [pressing, setPressing] = useState(false);
   const [open, setOpen] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  const cancel = () => {
-    clearTimeout(timer.current);
-    setPressing(false);
-  };
-
-  useEffect(() => () => clearTimeout(timer.current), []);
+  const { pressing, start, cancel } = useLongPress(() => setOpen(true));
 
   return (
     <>
@@ -36,13 +67,7 @@ export function ParentCornerBadge() {
         className="relative flex h-14 w-14 shrink-0 select-none flex-col items-center justify-center gap-0.5 rounded-2xl bg-white/80 shadow-sm"
         style={{ touchAction: 'none', WebkitTouchCallout: 'none' }}
         onContextMenu={(e) => e.preventDefault()}
-        onPointerDown={() => {
-          setPressing(true);
-          timer.current = setTimeout(() => {
-            setPressing(false);
-            setOpen(true);
-          }, LONG_PRESS_MS);
-        }}
+        onPointerDown={start}
         onPointerUp={cancel}
         onPointerLeave={cancel}
         onPointerCancel={cancel}
@@ -56,15 +81,7 @@ export function ParentCornerBadge() {
       >
         <span aria-hidden className="text-2xl leading-none">🌈</span>
         <span className="text-[10px] font-bold leading-none text-slate-400">{pressing ? '别松手' : BADGE_LABEL}</span>
-        <span
-          aria-hidden
-          className="pointer-events-none absolute inset-0 rounded-2xl border-4 border-amber-400"
-          style={{
-            opacity: pressing ? 1 : 0,
-            transform: pressing ? 'scale(1)' : 'scale(0.6)',
-            transition: pressing ? `all ${LONG_PRESS_MS}ms linear` : 'all 150ms ease-out',
-          }}
-        />
+        <LongPressRing pressing={pressing} />
       </button>
       {open && (
         <ParentGateDialog
@@ -172,4 +189,13 @@ export function ParentGateDialog({ onClose, onSuccess, title, description }: Par
       </div>
     </div>
   );
+}
+
+/**
+ * 课堂入口守卫：没解锁就把人退回首页。
+ * 路由层面兜底，避免通过历史返回、内部链接或手写路径绕过首页那张卡片。
+ */
+export function LessonGuard({ children }: { children: ReactNode }) {
+  if (!isLessonAreaUnlocked()) return <Navigate to="/" replace />;
+  return <>{children}</>;
 }

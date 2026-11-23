@@ -31,8 +31,21 @@ await assert.rejects(access(new URL('./KidEnglishPlay.tsx', import.meta.url)), {
 
 const kidLayout = await read('./KidLayout.tsx');
 assert.doesNotMatch(kidLayout, /english/i, '底部导航不再有英语岛');
+assert.doesNotMatch(kidLayout, /\/expression/, '说说小课堂不放在儿童导航里，避免孩子随手点进去');
 const kidHome = await read('./KidHome.tsx');
 assert.doesNotMatch(kidHome, /english/i, '首页不再有英语岛入口');
+
+// 说说小课堂：孩子不能自己进，卡片要长按 1.5 秒 + 家长/老师验证
+assert.doesNotMatch(kidHome, /to="\/expression"/, '卡片不能是可点的 Link');
+assert.match(kidHome, /data-testid="expression-card"/);
+assert.match(kidHome, /useLongPress\(/, '卡片走长按，不是单击');
+assert.match(kidHome, /title="课堂入口验证"/, '要点明这是课堂入口验证');
+assert.match(kidHome, /unlockLessonArea\(\)/, '验证通过才解锁课堂');
+assert.match(routes, /<LessonGuard><KidExpression \/><\/LessonGuard>/, '目标列表要守卫');
+assert.match(routes, /<LessonGuard><KidExpressionPlay \/><\/LessonGuard>/, '练习台要守卫');
+const expressionPage = await read('./KidExpression.tsx');
+assert.match(expressionPage, /data-testid="lock-lesson"/, '页面里要能手动结束课堂');
+assert.match(expressionPage, /lockLessonArea\(\)/, '结束课堂要真的上锁');
 
 // 旧版成人角色群聊目录已彻底移除
 await assert.rejects(access(new URL('../chat/', import.meta.url)), { code: 'ENOENT' }, 'src/pages/chat must be deleted');

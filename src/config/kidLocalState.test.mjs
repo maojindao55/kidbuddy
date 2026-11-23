@@ -168,4 +168,29 @@ const { AGE_PROFILES } = await importTsModule(new URL('./ageProfile.ts', import.
   assert.notEqual(history.newKidMessageId(), history.newKidMessageId());
 }
 
+// ---- 说说小课堂的课堂入口门禁 ----
+{
+  const lesson = await importTsModule(new URL('./lessonGate.ts', import.meta.url));
+  session.clear();
+  assert.equal(lesson.isLessonAreaUnlocked(), false, '默认锁着');
+
+  lesson.unlockLessonArea(1000);
+  assert.equal(lesson.isLessonAreaUnlocked(1000), true);
+  assert.equal(lesson.isLessonAreaUnlocked(1000 + lesson.LESSON_UNLOCK_MS - 1), true);
+  assert.equal(lesson.isLessonAreaUnlocked(1000 + lesson.LESSON_UNLOCK_MS), false, '30 分钟后自动上锁');
+  assert.equal(lesson.lessonUnlockLeftMinutes(1000), 30);
+  assert.equal(lesson.lessonUnlockLeftMinutes(1000 + lesson.LESSON_UNLOCK_MS), 0, '过期后剩余 0 分钟');
+
+  lesson.unlockLessonArea();
+  assert.equal(lesson.lessonUnlockLeftMinutes(), 30);
+  lesson.lockLessonArea();
+  assert.equal(lesson.isLessonAreaUnlocked(), false, '结束课堂能手动上锁');
+
+  // 存 sessionStorage 而不是 localStorage：关掉应用就重新锁上
+  lesson.unlockLessonArea();
+  assert.equal(local.getItem('lesson_unlocked_until'), null, '不写进长期存储');
+  assert.notEqual(session.getItem('lesson_unlocked_until'), null);
+  session.clear();
+}
+
 console.log('kidLocalState.test.mjs: ok');
