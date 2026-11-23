@@ -32,3 +32,5 @@ src-tauri/target/
 tsconfig.node.tsbuildinfo
 # cargo 偶尔会留下 targetXXXX 形式的临时目录
 src-tauri/target*/
+# cargo 偶尔会留下 targetXXXX 形式的临时目录
+src-tauri/target*/
