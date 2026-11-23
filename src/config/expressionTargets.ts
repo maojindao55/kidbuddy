@@ -47,6 +47,13 @@ export interface ExpressionTarget {
   id: string;
   name: string;
   band: ExpressionBand;
+  /**
+   * 由易到难的练习台阶，1 = 最容易。数字必须连续、不跳号。
+   * 排序口径是「语言结构递进」：先把句子说长（G2）→ 会问会答（G4）→
+   * 知道对谁怎么说（G5）→ 能讲清一件事（K1）→ 功能性表达（K2 拒绝、K3 求助）→
+   * 带记忆负荷的复述与转述（K4、K5）。
+   */
+  difficulty: number;
   /** 五领域归类，用于统计 */
   domain: '语言沟通' | '语言表达';
   /** 一句话说清练什么，给孩子和家长看 */
@@ -69,6 +76,7 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
     id: 'G2',
     name: '句长',
     band: 'preschool',
+    difficulty: 1,
     domain: '语言沟通',
     summary: '把两个词连成三个词以上的一句话',
     standard2: '自发说出三词以上简单句 ≥5 次/次观察',
@@ -117,6 +125,7 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
     id: 'G4',
     name: '提问与回答',
     band: 'preschool',
+    difficulty: 2,
     domain: '语言沟通',
     summary: '能回答「什么/谁/在哪」，也能自己问一句',
     standard2: '能回答什么/谁/在哪；能主动问「这是什么」',
@@ -164,6 +173,7 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
     id: 'G5',
     name: '语用',
     band: 'preschool',
+    difficulty: 3,
     domain: '语言沟通',
     summary: '请求、拒绝、求助、打招呼，用嘴说不用手拉',
     standard2: '请求、拒绝、求助、打招呼四类中 ≥3 类能主动说出',
@@ -211,6 +221,7 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
     id: 'K1',
     name: '说清一件事',
     band: 'school',
+    difficulty: 4,
     domain: '语言表达',
     summary: '谁、在哪、做了什么、然后——四样说齐',
     standard2: '用「谁—在哪—做了什么—然后」四要素讲述亲身经历，要素齐全率 ≥3/4',
@@ -258,6 +269,7 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
     id: 'K2',
     name: '明确拒绝与索回',
     band: 'school',
+    difficulty: 5,
     domain: '语言表达',
     summary: '不想给就说「不要」，东西被拿走就说「还给我」',
     standard2: '角色扮演/真实情境中，3 次均能说出「不要」「还给我」，音量可被听清',
@@ -299,6 +311,7 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
     id: 'K3',
     name: '主动求助',
     band: 'school',
+    difficulty: 6,
     domain: '语言表达',
     summary: '需要帮忙时，走过去、叫住人、说清要什么',
     standard2: '主动走向指定成人并开口「老师，我……」，完成一次求助',
@@ -340,6 +353,7 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
     id: 'K4',
     name: '复述口头通知',
     band: 'school',
+    difficulty: 7,
     domain: '语言表达',
     summary: '听一遍通知，把时间、地点、要带的东西说回来',
     standard2: '听完 1-2 句通知后复述关键信息，正确率 ≥80%',
@@ -381,6 +395,7 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
     id: 'K5',
     name: '电话/当面说清三要素',
     band: 'school',
+    difficulty: 8,
     domain: '语言表达',
     summary: '「我是谁、我在哪、我需要什么」按顺序说',
     standard2: '依次说出「我是谁、我在哪、我需要什么」，不依赖提示卡',
@@ -420,11 +435,31 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
   },
 ];
 
+/** 难度档，只用于给孩子家长看的一句话说明 */
+export type ExpressionTier = '入门' | '进阶' | '挑战';
+
+/** 台阶 → 档位。1-3 入门，4-6 进阶，7-8 挑战 */
+export function tierOf(difficulty: number): ExpressionTier {
+  if (difficulty <= 3) return '入门';
+  if (difficulty <= 6) return '进阶';
+  return '挑战';
+}
+
+/** 由易到难排好的目标，界面上用这个，不要直接用 EXPRESSION_TARGETS */
+export const EXPRESSION_TARGETS_BY_DIFFICULTY: ExpressionTarget[] = EXPRESSION_TARGETS.slice().sort(
+  (a, b) => a.difficulty - b.difficulty,
+);
+
+/** 建议下一个练的目标：台阶最靠前、还没稳定的那个 */
+export function suggestNextTarget(stableIds: string[]): ExpressionTarget | undefined {
+  return EXPRESSION_TARGETS_BY_DIFFICULTY.find((t) => !stableIds.includes(t.id));
+}
+
 export function getExpressionTarget(id: string | undefined): ExpressionTarget | undefined {
   if (!id) return undefined;
   return EXPRESSION_TARGETS.find((t) => t.id === id);
 }
 
 export function targetsForBand(band: ExpressionBand): ExpressionTarget[] {
-  return EXPRESSION_TARGETS.filter((t) => t.band === band);
+  return EXPRESSION_TARGETS_BY_DIFFICULTY.filter((t) => t.band === band);
 }

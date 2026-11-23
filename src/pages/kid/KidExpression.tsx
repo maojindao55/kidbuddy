@@ -1,6 +1,12 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { EXPRESSION_TARGETS, type ExpressionTarget } from '@/config/expressionTargets';
+import {
+  EXPRESSION_TARGETS_BY_DIFFICULTY,
+  suggestNextTarget,
+  tierOf,
+  type ExpressionTier,
+  type ExpressionTarget,
+} from '@/config/expressionTargets';
 import {
   SCORE_LABEL,
   STABILITY_LABEL,
@@ -49,19 +55,47 @@ function ScoreChip({ score }: { score: number | null }) {
   return <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${color}`}>{score} 分 · {SCORE_LABEL[score as 0 | 1 | 2]}</span>;
 }
 
-function TargetCard({ target, book, student }: { target: ExpressionTarget; book: ExpressionBook; student: string }) {
+const tierStyle: Record<ExpressionTier, string> = {
+  入门: 'bg-emerald-50 text-emerald-700',
+  进阶: 'bg-sky-50 text-sky-700',
+  挑战: 'bg-violet-50 text-violet-700',
+};
+
+function TargetCard({
+  target,
+  step,
+  recommended,
+  book,
+  student,
+}: {
+  target: ExpressionTarget;
+  step: number;
+  recommended: boolean;
+  book: ExpressionBook;
+  student: string;
+}) {
   const stat = targetStat(book, student, target.id);
+  const tier = tierOf(target.difficulty);
   return (
     <Link
       to={`/expression/${target.id}`}
       data-testid={`expression-target-${target.id}`}
-      className="flex flex-col gap-2.5 rounded-[28px] border-4 border-rose-100 bg-white p-4 shadow-md transition active:scale-[0.98]"
+      className={`flex flex-col gap-2.5 rounded-[28px] border-4 bg-white p-4 shadow-md transition active:scale-[0.98] ${
+        recommended ? 'border-rose-300 ring-4 ring-rose-100' : 'border-rose-100'
+      }`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span
+              data-testid={`expression-step-${target.id}`}
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-rose-500 text-xs font-extrabold text-white"
+            >
+              {step}
+            </span>
             <span className="rounded-lg bg-rose-100 px-2 py-0.5 text-xs font-extrabold text-rose-700">{target.id}</span>
             <span className="text-lg font-extrabold text-slate-800">{target.name}</span>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${tierStyle[tier]}`}>{tier}</span>
           </div>
           <p className="mt-1 text-sm leading-snug text-slate-500">{target.summary}</p>
         </div>
@@ -76,7 +110,13 @@ function TargetCard({ target, book, student }: { target: ExpressionTarget; book:
       <div className="rounded-xl bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-500">{historyLine(stat)}</div>
       <div className="mt-auto flex items-start justify-between gap-2 pt-1">
         <span className="line-clamp-2 min-w-0 flex-1 text-xs leading-snug text-slate-400">2 分标准：{target.standard2}</span>
-        <span className="shrink-0 rounded-full bg-rose-50 px-3 py-1 text-xs font-bold text-rose-600">开始 →</span>
+        <span
+          className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${
+            recommended ? 'bg-rose-500 text-white' : 'bg-rose-50 text-rose-600'
+          }`}
+        >
+          {recommended ? '建议从这里练 →' : '开始 →'}
+        </span>
       </div>
     </Link>
   );
@@ -90,8 +130,14 @@ export default function KidExpression() {
   const [exporting, setExporting] = useState<ExpressionSession | null>(null);
 
   const mine = sessionsOf(book, student);
-  const stableCount = EXPRESSION_TARGETS.filter((t) => targetStat(book, student, t.id).status === 'stable').length;
-  const pendingCount = EXPRESSION_TARGETS.filter((t) => targetStat(book, student, t.id).status === 'pending').length;
+  const stableIds = EXPRESSION_TARGETS_BY_DIFFICULTY.filter(
+    (t) => targetStat(book, student, t.id).status === 'stable',
+  ).map((t) => t.id);
+  const stableCount = stableIds.length;
+  const pendingCount = EXPRESSION_TARGETS_BY_DIFFICULTY.filter(
+    (t) => targetStat(book, student, t.id).status === 'pending',
+  ).length;
+  const nextTarget = suggestNextTarget(stableIds);
 
   const changeStudent = (value: string) => {
     setStudent(value);
@@ -173,10 +219,22 @@ export default function KidExpression() {
         )}
 
         <div>
-          <h2 className="mb-3 text-xl font-extrabold text-slate-800">选一个目标开始练</h2>
+          <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h2 className="text-xl font-extrabold text-slate-800">选一个目标开始练</h2>
+            <span className="text-xs font-bold text-slate-400">
+              由易到难排列（1 最容易），一个目标练稳了再往下走
+            </span>
+          </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {EXPRESSION_TARGETS.map((t) => (
-              <TargetCard key={t.id} target={t} book={book} student={student} />
+            {EXPRESSION_TARGETS_BY_DIFFICULTY.map((t, i) => (
+              <TargetCard
+                key={t.id}
+                target={t}
+                step={i + 1}
+                recommended={nextTarget?.id === t.id}
+                book={book}
+                student={student}
+              />
             ))}
           </div>
         </div>
