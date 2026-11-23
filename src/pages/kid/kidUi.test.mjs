@@ -87,4 +87,14 @@ assert.match(input, /voice\.inputMode === 'voice' && recognizer\.supported/);
 assert.match(input, /addEventListener\('keydown'/);
 assert.match(input, /Space/);
 
+// 说说小课堂：目标按学段分组显示，但圆圈数字必须是全表台阶（target.difficulty），
+// 不能按列表下标重新编号——否则段内会出现「4 比 6 容易」的错觉。
+const exprHome = await read('./KidExpression.tsx');
+assert.match(exprHome, /stageGroups\(/, '目标列表要按学段分组');
+assert.match(exprHome, /expression-step-/, '目标卡要显示台阶编号');
+assert.match(exprHome, /\{target\.difficulty\}/, '台阶编号必须直接用 difficulty');
+assert.doesNotMatch(exprHome, /step=\{i \+ 1\}/, '不允许按列表下标重新编号');
+assert.match(exprHome, /stage-filter-/, '要有学段筛选');
+assert.match(exprHome, /kidbuddy\.expression\.stage/, '学段选择要记住');
+
 console.log('kidUi.test.mjs: ok');

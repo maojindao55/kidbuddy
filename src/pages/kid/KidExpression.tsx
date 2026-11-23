@@ -77,13 +77,11 @@ const tierStyle: Record<ExpressionTier, string> = {
 
 function TargetCard({
   target,
-  step,
   recommended,
   book,
   student,
 }: {
   target: ExpressionTarget;
-  step: number;
   recommended: boolean;
   book: ExpressionBook;
   student: string;
@@ -103,9 +101,10 @@ function TargetCard({
           <div className="flex flex-wrap items-center gap-1.5">
             <span
               data-testid={`expression-step-${target.id}`}
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-rose-500 text-xs font-extrabold text-white"
+              title={`全表台阶 ${target.difficulty} / 10，越小越容易`}
+              className="flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full bg-rose-500 px-1.5 text-xs font-extrabold text-white"
             >
-              {step}
+              {target.difficulty}
             </span>
             <span className="rounded-lg bg-rose-100 px-2 py-0.5 text-xs font-extrabold text-rose-700">{target.id}</span>
             <span className="text-lg font-extrabold text-slate-800">{target.name}</span>
@@ -254,7 +253,7 @@ export default function KidExpression() {
           <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h2 className="text-xl font-extrabold text-slate-800">选一个目标开始练</h2>
             <span className="text-xs font-bold text-slate-400">
-              先按学段（B → G → K），学段内由易到难；练稳一个再往下走
+              先按学段（B → G → K），段内由易到难；圆圈数字是全表台阶 1–10，分组后段内会跳号
             </span>
           </div>
 
@@ -293,11 +292,10 @@ export default function KidExpression() {
                   </span>
                 </div>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  {group.targets.map((t, i) => (
+                  {group.targets.map((t) => (
                     <TargetCard
                       key={t.id}
                       target={t}
-                      step={i + 1}
                       recommended={nextTarget?.id === t.id}
                       book={book}
                       student={student}
