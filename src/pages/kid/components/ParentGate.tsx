@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   checkChallengeAnswer,
@@ -8,52 +8,27 @@ import {
   verifyParentPin,
 } from '@/config/parentGate';
 
-const LONG_PRESS_MS = 1500;
+const BADGE_LABEL = '家长';
 
-/** 左上角的彩虹角标：长按 1.5 秒弹出验证，通过后进入家长中心 */
+/** 左上角的彩虹角标：点一下弹出家长验证，验证通过后进入家长中心 */
 export function ParentCornerBadge() {
   const navigate = useNavigate();
-  const [pressing, setPressing] = useState(false);
   const [open, setOpen] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  const cancel = () => {
-    clearTimeout(timer.current);
-    setPressing(false);
-  };
-
-  useEffect(() => () => clearTimeout(timer.current), []);
 
   return (
     <>
       <button
         type="button"
-        aria-label="家长入口（长按）"
+        aria-label="家长中心（需验证）"
+        title="家长中心（需验证）"
         data-testid="parent-corner"
-        className="relative flex h-14 w-14 shrink-0 select-none items-center justify-center rounded-2xl bg-white/80 text-3xl shadow-sm"
-        style={{ touchAction: 'none', WebkitTouchCallout: 'none' }}
+        className="flex h-14 w-14 shrink-0 select-none flex-col items-center justify-center gap-0.5 rounded-2xl bg-white/80 shadow-sm transition hover:bg-white active:scale-95"
+        style={{ touchAction: 'manipulation' }}
         onContextMenu={(e) => e.preventDefault()}
-        onPointerDown={() => {
-          setPressing(true);
-          timer.current = setTimeout(() => {
-            setPressing(false);
-            setOpen(true);
-          }, LONG_PRESS_MS);
-        }}
-        onPointerUp={cancel}
-        onPointerLeave={cancel}
-        onPointerCancel={cancel}
+        onClick={() => setOpen(true)}
       >
-        <span aria-hidden>🌈</span>
-        <span
-          aria-hidden
-          className="pointer-events-none absolute inset-0 rounded-2xl border-4 border-amber-400"
-          style={{
-            opacity: pressing ? 1 : 0,
-            transform: pressing ? 'scale(1)' : 'scale(0.6)',
-            transition: pressing ? `all ${LONG_PRESS_MS}ms linear` : 'all 150ms ease-out',
-          }}
-        />
+        <span aria-hidden className="text-2xl leading-none">🌈</span>
+        <span className="text-[10px] font-bold leading-none text-slate-400">{BADGE_LABEL}</span>
       </button>
       {open && (
         <ParentGateDialog

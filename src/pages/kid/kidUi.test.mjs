@@ -43,11 +43,19 @@ assert.match(parent, /<Navigate to="\/" replace \/>/);
 assert.doesNotMatch(parent, /from '\.\.\/chat'/, 'parent area no longer reuses old adult chat');
 
 const gate = await read('./components/ParentGate.tsx');
-assert.match(gate, /LONG_PRESS_MS = 1500/);
+// 家长入口必须一眼能找到：单击即弹验证（早先要求长按 1.5 秒，家长根本发现不了）
+assert.match(gate, /onClick=\{\(\) => setOpen\(true\)\}/, '点一下就要弹家长验证');
+assert.doesNotMatch(gate, /LONG_PRESS_MS/, '不再要求长按');
+assert.match(gate, /aria-label="家长中心（需验证）"/, '入口要有明确的无障碍名称');
+assert.match(gate, /BADGE_LABEL = '家长'/, '入口上要有「家长」字样');
+assert.match(gate, /\{BADGE_LABEL\}<\/span>/, '「家长」字样要真的渲染出来');
 assert.match(gate, /checkChallengeAnswer/);
 assert.match(gate, /unlockParentArea\(\)/);
 assert.match(gate, /hasParentPin/);
 assert.match(gate, /verifyParentPin/);
+// 首页底部还要有一个文字入口，避免家长找不到左上角的角标
+assert.match(kidHome, /data-testid="parent-entry"/, '首页要有家长中心文字入口');
+assert.match(kidHome, /<ParentGateDialog/, '首页入口也要过验证');
 
 // 护眼时长遮罩
 const layout = await read('./KidLayout.tsx');

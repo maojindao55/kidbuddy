@@ -1,12 +1,15 @@
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { unlockParentArea } from '@/config/parentGate';
 import { useKid } from './KidContext';
 import { CompanionAvatar } from './components/ChatBubble';
+import { ParentGateDialog } from './components/ParentGate';
 import { PLAYGROUND_CHAT_ID } from './kidRoutes';
 
 export default function KidHome() {
   const navigate = useNavigate();
   const { companions, companionsLoading, memory, aiConfigured, aiConfigChecked } = useKid();
+  const [gateOpen, setGateOpen] = useState(false);
   const name = memory.nickname || '小朋友';
 
   return (
@@ -136,6 +139,26 @@ export default function KidHome() {
       >
         <span aria-hidden>🎲</span> 和小伙伴玩游戏
       </Link>
+
+      <button
+        type="button"
+        data-testid="parent-entry"
+        onClick={() => setGateOpen(true)}
+        className="mx-auto mt-4 flex h-12 items-center justify-center gap-2 rounded-2xl px-4 text-sm font-semibold text-slate-400 transition hover:bg-white/70 hover:text-slate-600"
+      >
+        <span aria-hidden>⚙️</span> 家长中心（需家长验证）
+      </button>
+
+      {gateOpen && (
+        <ParentGateDialog
+          onClose={() => setGateOpen(false)}
+          onSuccess={() => {
+            unlockParentArea();
+            setGateOpen(false);
+            navigate('/parent');
+          }}
+        />
+      )}
     </div>
   );
 }
