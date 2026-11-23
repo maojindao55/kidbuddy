@@ -3,7 +3,7 @@
  *
  * 编号与判定标准逐条对齐 skill「课堂记录量化工具」的 references/goal-codes.md：
  * - B 段（0-3 岁 · 语言沟通）：B5 首个有意义的词
- * - G 段（3-6 岁 · 语言沟通）：G1 词汇、G2 句长、G4 提问与回答、G5 语用
+ * - G 段（3-6 岁 · 语言沟通）：G1 词汇、G2 句长、G3 两步指令、G4 提问与回答、G5 语用
  * - K 段（6-12 岁 · 语言表达）：K1 说清一件事、K2 明确拒绝与索回、K3 主动求助、
  *   K4 复述口头通知、K5 电话/当面说清三要素
  *
@@ -11,14 +11,19 @@
  * 改了统计会错位。跨龄个案按「实际教学目标所在段」取码，不按年龄取码。
  *
  * 排列依据：**编号即台阶**。代码表本身按年龄段分段（B → G → K），段内编号就是
- * 教学先后：G1 词汇 → G2 句长 → G4 问答 → G5 语用；K1 叙事 → K2 拒绝 → K3 求助 →
- * K4 复述 → K5 电话。difficulty 直接等于这个顺序（1-10），所以卡片上的圆圈数字
- * 和目标编号的尾号同向递增，不会出现「④ K2 排在 ⑧ K1 前面」这种看着别扭的情况。
+ * 教学先后：G1 词汇 → G2 句长 → G3 两步指令 → G4 问答 → G5 语用；
+ * K1 叙事 → K2 拒绝 → K3 求助 → K4 复述 → K5 电话。
+ * difficulty 直接等于这个顺序（1-11），所以卡片上的圆圈数字和目标编号的尾号
+ * 同向递增，不会出现「④ K2 排在 ⑧ K1 前面」这种看着别扭的情况。
+ *
+ * 注意 G3 是听者反应（Listener），不是表达：它练「听懂并执行」，本身不要求开口。
+ * 放在这里是因为它是 G4 问答和 K1 叙述的前置——听不懂带顺序的指令，就讲不清顺序。
  *
  * 与 VB-MAPP 的关系（Sundberg）：B5 是 Mand 请求起点，G1 是 Tact 命名起点，
- * G2 是语言结构，G4 是 Intraverbal，K2/K3 是功能性 Mand。VB-MAPP 的语言操作
- * 获得顺序（Mand → Tact → 语言结构 → 功能性 Mand → 社会语用 → Intraverbal）
- * 与这套编号在段内是一致的，差异只出现在跨段：同一功能在 G 段是简版、在 K 段是难版。
+ * G2 是语言结构，G3 是 Listener 双成分指令，G4 是 Intraverbal，K2/K3 是功能性 Mand。
+ * VB-MAPP 的语言操作获得顺序（Mand → Tact → 语言结构 → 功能性 Mand → 社会语用 →
+ * Intraverbal）与这套编号在段内是一致的，差异只出现在跨段：同一功能在 G 段是简版、
+ * 在 K 段是难版。
  *
  * 对 ASD 与发育迟缓孩子的意义：
  * 1. 先建立「说话有用」——请求的动机就在眼前，比命名和问答都容易起量；
@@ -286,10 +291,68 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
     },
   },
   {
+    id: 'G3',
+    name: '听两步指令',
+    band: 'preschool',
+    difficulty: 4,
+    domain: '语言沟通',
+    summary: '听到「先…再…」两步指令，按顺序把两件事都做完',
+    standard2: '「先…再…」两步指令顺序正确 ≥3/4 次',
+    onePenalty: '只完成第一步；需重复',
+    sessionSuccess: '4 个回合里 ≥3 次两步都做完、顺序正确',
+    opener: '我说两件事，你按顺序做。',
+    vbMapp: {
+      operant: 'Listener 听者反应',
+      level: 2,
+      milestone: 'Listener L2 · 双成分指令（先…再…）',
+      rationale:
+        '两步指令考的是听懂加按顺序执行，不用自己组句，所以比开口表达容易起量。ASD 孩子常只听进最后一个词或只做第一步，先把「听完再动手」练稳，后面讲事情的顺序才有基础。',
+      tag: 'Listener L2',
+    },
+    tasks: [
+      {
+        id: 'G3-t1',
+        ask: '（桌上放一个杯子、一盒积木）听好：先拿杯子，再拿积木。',
+        hint: '「先拿杯子……再拿积木」',
+        checks: ['两步都做了', '顺序正确', '听完才开始动手'],
+      },
+      {
+        id: 'G3-t2',
+        ask: '（地上放一个球、一个筐）听好：先拍一下球，再把球放进筐里。',
+        hint: '「先拍球……再放进筐」',
+        checks: ['两步都做完', '顺序正确', '没有做到一半停下'],
+      },
+      {
+        id: 'G3-t3',
+        ask: '（桌上有笔和纸）听好：先把纸拿给我，再把笔放回盒子。',
+        hint: '「先给我纸……再收笔」',
+        checks: ['两步都做完', '顺序正确', '不用重复指令'],
+      },
+      {
+        id: 'G3-t4',
+        ask: '（把玩具放在他面前）听好：先站起来，再拍拍手。',
+        hint: '「先站……再拍手」',
+        checks: ['两步都做完', '顺序正确', '中间没等我再说一遍'],
+      },
+    ],
+    familyGuide: {
+      what: '练「听完两件事，按顺序做完」。只说一次，不要边说边做给他看。',
+      prepare: '用现成的东西就够：杯子、积木、球、筐、笔、纸。桌上只放本次要用的两三样，别的收走。',
+      start: '照这句说：「听好：先拿杯子，再拿积木。」说完闭嘴，退开一步等他动。',
+      wait: WAIT_THREE_SECONDS,
+      prompts:
+        '① 只重复第二步的关键词「……再拿什么？」→ ② 说一步等一步（先拿杯子……好，再拿？）→ ③ 手把手带他做完两步，再退回上一级。',
+      success: '4 个回合里 ≥3 次两步都做完、顺序正确，中间不用你提示。',
+      fallback: '先退回一步指令（「拿杯子」），做顺了再合成两步；还不行就用两张图卡当视觉提示。',
+      dose: '一天 5 分钟，8-10 个回合；指令内容天天换，别固定成一套背下来。',
+      avoid: '① 边说边用手指（会变成模仿，不是听懂）　② 他没动就重复三遍　③ 一次给三步以上',
+    },
+  },
+  {
     id: 'G4',
     name: '提问与回答',
     band: 'preschool',
-    difficulty: 4,
+    difficulty: 5,
     domain: '语言沟通',
     summary: '能回答「什么/谁/在哪」，也能自己问一句',
     standard2: '能回答什么/谁/在哪；能主动问「这是什么」',
@@ -347,7 +410,7 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
     id: 'G5',
     name: '语用四类',
     band: 'preschool',
-    difficulty: 5,
+    difficulty: 6,
     domain: '语言沟通',
     summary: '请求、拒绝、求助、打招呼，四类里能自己说出三类',
     standard2: '请求、拒绝、求助、打招呼四类中 ≥3 类能主动说出',
@@ -404,7 +467,7 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
     id: 'K1',
     name: '说清一件事',
     band: 'school',
-    difficulty: 6,
+    difficulty: 7,
     domain: '语言表达',
     summary: '用「谁—在哪—做了什么—然后」讲清一件亲身经历',
     standard2: '用「谁—在哪—做了什么—然后」四要素讲述亲身经历，要素齐全率 ≥3/4',
@@ -461,7 +524,7 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
     id: 'K2',
     name: '拒绝与索回',
     band: 'school',
-    difficulty: 7,
+    difficulty: 8,
     domain: '语言表达',
     summary: '不想给就说「不要」，东西被拿走就说「还给我」',
     standard2: '角色扮演/真实情境中，3 次均能说出「不要」「还给我」，音量可被听清',
@@ -519,7 +582,7 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
     id: 'K3',
     name: '主动求助',
     band: 'school',
-    difficulty: 8,
+    difficulty: 9,
     domain: '语言表达',
     summary: '卡住了就找人开口说「帮我」，不自己硬撑也不放弃',
     standard2: '主动走向指定成人并开口「老师，我……」，完成一次求助',
@@ -577,7 +640,7 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
     id: 'K4',
     name: '复述通知',
     band: 'school',
-    difficulty: 9,
+    difficulty: 10,
     domain: '语言表达',
     summary: '听完一句通知，能把关键信息说出来',
     standard2: '听完 1-2 句通知后复述关键信息，正确率 ≥80%',
@@ -634,7 +697,7 @@ export const EXPRESSION_TARGETS: ExpressionTarget[] = [
     id: 'K5',
     name: '电话说清三要素',
     band: 'school',
-    difficulty: 10,
+    difficulty: 11,
     domain: '语言表达',
     summary: '电话或当面对别人说清「我是谁、我在哪、我需要什么」',
     standard2: '依次说出「我是谁、我在哪、我需要什么」，不依赖提示卡',

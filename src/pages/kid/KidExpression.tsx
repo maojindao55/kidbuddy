@@ -196,7 +196,7 @@ export default function KidExpression() {
             <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-4xl" aria-hidden>💬</span>
             <div>
               <h1 className="text-3xl font-extrabold">说说小课堂</h1>
-              <p className="mt-1 text-base opacity-95">练语言表达：说清一件事、复述通知、开口求助——每次练完留一份可统计的记录。</p>
+              <p className="mt-1 text-base opacity-95">练表达与听指令：开口要东西、听两步指令、说清一件事——每次练完留一份可统计的记录。</p>
             </div>
           </div>
           <div className="flex gap-3">
@@ -253,7 +253,7 @@ export default function KidExpression() {
           <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h2 className="text-xl font-extrabold text-slate-800">选一个目标开始练</h2>
             <span className="text-xs font-bold text-slate-400">
-              先按学段（B → G → K），段内由易到难；圆圈数字是全表台阶 1–10，与目标编号同向递增
+              先按学段（B → G → K），段内由易到难；圆圈数字是全表台阶，与目标编号同向递增
             </span>
           </div>
 

@@ -62,7 +62,7 @@ const session = (over) => ({
 // ---- 目标库与 skill 编号一致，且按 VB-MAPP 语言操作顺序排列 ----
 {
   const ids = targets.EXPRESSION_TARGETS_BY_DIFFICULTY.map((t) => t.id);
-  assert.deepEqual(ids, ['B5', 'G1', 'G2', 'G4', 'G5', 'K1', 'K2', 'K3', 'K4', 'K5']);
+  assert.deepEqual(ids, ['B5', 'G1', 'G2', 'G3', 'G4', 'G5', 'K1', 'K2', 'K3', 'K4', 'K5']);
   for (const t of targets.EXPRESSION_TARGETS) {
     assert.ok(t.tasks.length >= 3, `${t.id} 至少 3 道题`);
     assert.ok(t.standard2.length > 0 && t.onePenalty.length > 0);

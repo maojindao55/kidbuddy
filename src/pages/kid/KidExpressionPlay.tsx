@@ -697,8 +697,8 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
                 data-testid="dtt-wait"
               >
                 {waitExpired
-                  ? '已等满 3 秒没开口 —— 现在给一级辅助，然后再等他一次。'
-                  : '说完就闭嘴，等 3 秒。他不开口不要重复指令。'}
+                  ? '已等满 3 秒没反应 —— 现在给一级辅助，然后再等他一次。'
+                  : '说完就闭嘴，等 3 秒。他没反应不要重复指令。'}
               </div>
               <button
                 type="button"

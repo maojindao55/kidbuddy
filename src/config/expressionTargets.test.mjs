@@ -16,14 +16,14 @@ const { EXPRESSION_TARGETS, EXPRESSION_TARGETS_BY_DIFFICULTY, targetsForBand, ti
 // ---- 难度台阶：必须从 1 开始的连续序号，不跳号不重复 ----
 {
   const steps = EXPRESSION_TARGETS.map((t) => t.difficulty).sort((a, b) => a - b);
-  assert.deepEqual(steps, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], '难度序号必须连续，否则「由易到难」会出现空档');
+  assert.deepEqual(steps, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], '难度序号必须连续，否则「由易到难」会出现空档');
 }
 
 // ---- 排序：编号即台阶，B5 → G1 → G2 → G4 → G5 → K1 … K5 ----
 {
   assert.deepEqual(
     EXPRESSION_TARGETS_BY_DIFFICULTY.map((t) => t.id),
-    ['B5', 'G1', 'G2', 'G4', 'G5', 'K1', 'K2', 'K3', 'K4', 'K5'],
+    ['B5', 'G1', 'G2', 'G3', 'G4', 'G5', 'K1', 'K2', 'K3', 'K4', 'K5'],
     '台阶顺序必须和编号一致',
   );
 }
@@ -80,8 +80,8 @@ const { EXPRESSION_TARGETS, EXPRESSION_TARGETS_BY_DIFFICULTY, targetsForBand, ti
 
 // ---- 排序不能改动原数组（原始定义的顺序要继续可查） ----
 {
-  assert.equal(EXPRESSION_TARGETS.length, 10);
-  assert.equal(EXPRESSION_TARGETS_BY_DIFFICULTY.length, 10);
+  assert.equal(EXPRESSION_TARGETS.length, 11);
+  assert.equal(EXPRESSION_TARGETS_BY_DIFFICULTY.length, 11);
   assert.notEqual(EXPRESSION_TARGETS, EXPRESSION_TARGETS_BY_DIFFICULTY, '必须是副本，不能原地排序');
 }
 
@@ -93,12 +93,13 @@ const { EXPRESSION_TARGETS, EXPRESSION_TARGETS_BY_DIFFICULTY, targetsForBand, ti
   assert.equal(tierOf(6), '进阶');
   assert.equal(tierOf(7), '挑战');
   assert.equal(tierOf(10), '挑战');
+  assert.equal(tierOf(11), '挑战');
 }
 
 // ---- 分学段取目标时也要保持由易到难 ----
 {
   assert.deepEqual(targetsForBand('infant').map((t) => t.id), ['B5']);
-  assert.deepEqual(targetsForBand('preschool').map((t) => t.id), ['G1', 'G2', 'G4', 'G5']);
+  assert.deepEqual(targetsForBand('preschool').map((t) => t.id), ['G1', 'G2', 'G3', 'G4', 'G5']);
   assert.deepEqual(targetsForBand('school').map((t) => t.id), ['K1', 'K2', 'K3', 'K4', 'K5']);
   for (const band of ['infant', 'preschool', 'school']) {
     const list = targetsForBand(band);
@@ -118,7 +119,7 @@ const { EXPRESSION_TARGETS, EXPRESSION_TARGETS_BY_DIFFICULTY, targetsForBand, ti
   );
   assert.deepEqual(groups.map((g) => g.targets.map((t) => t.id)), [
     ['B5'],
-    ['G1', 'G2', 'G4', 'G5'],
+    ['G1', 'G2', 'G3', 'G4', 'G5'],
     ['K1', 'K2', 'K3', 'K4', 'K5'],
   ]);
   for (const g of groups) {
@@ -131,7 +132,7 @@ const { EXPRESSION_TARGETS, EXPRESSION_TARGETS_BY_DIFFICULTY, targetsForBand, ti
 // ---- 学前孩子打开时，K 段不会被夹在 B/G 中间 ----
 {
   const order = mod.EXPRESSION_TARGETS_BY_STAGE.map((t) => t.id);
-  assert.deepEqual(order, ['B5', 'G1', 'G2', 'G4', 'G5', 'K1', 'K2', 'K3', 'K4', 'K5']);
+  assert.deepEqual(order, ['B5', 'G1', 'G2', 'G3', 'G4', 'G5', 'K1', 'K2', 'K3', 'K4', 'K5']);
   const firstKSchool = order.findIndex((id) => id.startsWith('K'));
   const lastGPreschool = order.map((id) => id.startsWith('G')).lastIndexOf(true);
   assert.ok(firstKSchool > lastGPreschool, 'K 段必须整体排在 G 段之后');
@@ -140,7 +141,7 @@ const { EXPRESSION_TARGETS, EXPRESSION_TARGETS_BY_DIFFICULTY, targetsForBand, ti
 // ---- 单个学段筛选：只返回该段，且顺序不乱 ----
 {
   assert.deepEqual(mod.stageGroups('infant').map((g) => g.stage.band), ['infant']);
-  assert.deepEqual(mod.stageGroups('preschool').map((g) => g.targets.map((t) => t.id)), [['G1', 'G2', 'G4', 'G5']]);
+  assert.deepEqual(mod.stageGroups('preschool').map((g) => g.targets.map((t) => t.id)), [['G1', 'G2', 'G3', 'G4', 'G5']]);
   assert.deepEqual(mod.stageGroups('school').map((g) => g.targets.map((t) => t.id)), [['K1', 'K2', 'K3', 'K4', 'K5']]);
   assert.equal(mod.stageGroups('preschool').length, 1);
 }
@@ -149,13 +150,13 @@ const { EXPRESSION_TARGETS, EXPRESSION_TARGETS_BY_DIFFICULTY, targetsForBand, ti
 {
   assert.notEqual(mod.EXPRESSION_TARGETS_BY_STAGE, mod.EXPRESSION_TARGETS);
   assert.notEqual(mod.EXPRESSION_TARGETS_BY_STAGE, mod.EXPRESSION_TARGETS_BY_DIFFICULTY);
-  assert.equal(mod.EXPRESSION_TARGETS_BY_STAGE.length, 10);
+  assert.equal(mod.EXPRESSION_TARGETS_BY_STAGE.length, 11);
 }
 
 // ---- 建议目标跟着学段顺序走：先把 B 段做完再看 G ----
 {
   assert.equal(mod.suggestNextTarget(['B5']).id, 'G1');
-  assert.equal(mod.suggestNextTarget(['B5', 'G1', 'G2', 'G4', 'G5']).id, 'K1', 'G 段清完后才进 K 段');
+  assert.equal(mod.suggestNextTarget(['B5', 'G1', 'G2', 'G3', 'G4', 'G5']).id, 'K1', 'G 段清完后才进 K 段');
 }
 
 
