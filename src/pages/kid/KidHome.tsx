@@ -41,7 +41,7 @@ export default function KidHome() {
       )}
 
       {/* 主力创意与成长入口：绘本魔法屋、英语冒险岛 & 魔法画室 */}
-      <div className="mx-auto mb-5 grid max-w-5xl grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="mx-auto mb-5 grid max-w-5xl grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-4">
         <Link
           to="/books"
           data-testid="books-card"
@@ -93,11 +93,11 @@ export default function KidHome() {
           className="flex items-center gap-3 rounded-[32px] bg-gradient-to-r from-rose-400 to-orange-400 p-5 text-white shadow-lg transition active:scale-[0.99]"
         >
           <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-3xl" aria-hidden>
-            🗣️
+            💬
           </span>
           <div className="min-w-0 flex-1">
             <div className="text-xl font-extrabold">说说小课堂</div>
-            <div className="text-sm opacity-95">练语言表达，练完留下记录</div>
+            <div className="text-sm opacity-95">练语言表达，留下记录</div>
           </div>
           <span className="text-2xl font-extrabold" aria-hidden>→</span>
         </Link>

@@ -40,7 +40,7 @@ const COACH: KidCompanion = {
     catchphrase: '你讲，我听。',
     greeting: '我们开始吧。',
     color: '#F97316',
-    emoji: '🗣️',
+    emoji: '💬',
   },
 };
 
@@ -434,7 +434,7 @@ function PracticeSession({ target, onExit }: { target: ExpressionTarget; onExit:
         <Link to="/expression" aria-label="返回说说小课堂" className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-2xl shadow-sm">
           ←
         </Link>
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-rose-100 text-3xl" aria-hidden>🗣️</div>
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-rose-100 text-3xl" aria-hidden>💬</div>
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-xl font-extrabold text-slate-800">
             {target.id} {target.name}

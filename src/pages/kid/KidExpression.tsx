@@ -116,7 +116,7 @@ export default function KidExpression() {
       <div className="mx-auto max-w-5xl space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-4 rounded-[32px] bg-gradient-to-r from-rose-400 to-orange-400 p-6 text-white shadow-lg">
           <div className="flex items-center gap-4">
-            <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-4xl" aria-hidden>🗣️</span>
+            <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-4xl" aria-hidden>💬</span>
             <div>
               <h1 className="text-3xl font-extrabold">说说小课堂</h1>
               <p className="mt-1 text-base opacity-95">练语言表达：说清一件事、复述通知、开口求助——每次练完留一份可统计的记录。</p>
