@@ -30,3 +30,5 @@ src-tauri/target/
 # macOS 在外置 exFAT/NTFS 盘上生成的 AppleDouble 元数据，不是源码
 ._*
 tsconfig.node.tsbuildinfo
+# cargo 偶尔会留下 targetXXXX 形式的临时目录
+src-tauri/target*/
