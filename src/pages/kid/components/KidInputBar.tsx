@@ -23,6 +23,8 @@ interface KidInputBarProps {
   imageSuggestions?: string[];
   /** 通知外层当前是否附带了待发送图片 */
   onPendingImageChange?: (hasImage: boolean) => void;
+  /** 可选内容最大宽度（如 max-w-6xl），与上方双栏页面对齐 */
+  maxWidthClass?: string;
 }
 
 const DEFAULT_IMAGE_SUGGESTIONS = ['这里面是什么呀？', '夸夸我的作品', '帮我讲讲这张图'];
@@ -51,6 +53,7 @@ export function KidInputBar({
   allowImage = false,
   imageSuggestions,
   onPendingImageChange,
+  maxWidthClass,
 }: KidInputBarProps) {
   const { voice, setVoicePrefs, recognizer: defaultRecognizer, profile } = useKid();
   const recognizer = recognizerOverride || defaultRecognizer;
@@ -203,7 +206,7 @@ export function KidInputBar({
 
   return (
     <div
-      className={`border-t-2 px-4 pb-4 pt-3 backdrop-blur transition ${
+      className={`border-t-2 px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-3 backdrop-blur transition ${
         draggingImage ? 'border-amber-400 bg-amber-50/95' : 'border-amber-100 bg-white/90'
       }`}
       data-testid="kid-input-bar"
@@ -216,6 +219,7 @@ export function KidInputBar({
       onDragLeave={() => setDraggingImage(false)}
       onDrop={handleDrop}
     >
+      <div className={maxWidthClass ? `mx-auto w-full ${maxWidthClass}` : 'w-full'}>
       {allowImage && (
         <input
           ref={fileInputRef}
@@ -304,9 +308,12 @@ export function KidInputBar({
             disabled={talkDisabled}
             data-testid="push-to-talk"
             style={{ touchAction: 'none' }}
-            onPointerDown={startListening}
+            onPointerDown={(e) => {
+              e.currentTarget.setPointerCapture?.(e.pointerId);
+              startListening();
+            }}
             onPointerUp={stopListening}
-            onPointerLeave={stopListening}
+            onLostPointerCapture={stopListening}
             onPointerCancel={stopListening}
             onContextMenu={(e) => e.preventDefault()}
             className={`flex h-16 flex-1 select-none items-center justify-center gap-2 rounded-full text-xl font-bold text-white shadow-md transition disabled:opacity-50 ${
@@ -353,6 +360,7 @@ export function KidInputBar({
             </button>
           </form>
         )}
+      </div>
       </div>
     </div>
   );

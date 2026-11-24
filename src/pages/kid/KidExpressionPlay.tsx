@@ -152,6 +152,16 @@ interface Line {
   id: string;
   isKid: boolean;
   text: string;
+  /** 实际朗读的口头指令；为空字符串时表示纯情境/静默提示，不朗读 */
+  speakText?: string;
+}
+
+/** 把题干/提示开头的（动作/教具摆放说明）和真正要对孩子说的话拆开 */
+function parseCue(raw: string): { setup: string; spoken: string } {
+  const trimmed = raw.trim();
+  const match = trimmed.match(/^[（(]([^）)]+)[）)]\s*(.*)$/);
+  if (!match) return { setup: '', spoken: trimmed };
+  return { setup: match[1].trim(), spoken: match[2].trim() };
 }
 
 interface TrialSpec {
@@ -203,6 +213,18 @@ function outcomeMark(round: ExpressionRound): { text: string; tone: string } {
   return { text: '未判定', tone: 'bg-slate-100 text-slate-400' };
 }
 
+function trialChipColor(round: ExpressionRound, isCurrent: boolean): string {
+  const ring = isCurrent ? 'ring-2 ring-slate-800 ring-offset-1' : '';
+  if (round.skipped || round.outcome === 'no_response') return `bg-slate-200 text-slate-600 ${ring}`;
+  if (round.outcome === 'correct') {
+    return round.promptLevel === 'independent'
+      ? `bg-emerald-500 text-white ${ring}`
+      : `bg-amber-400 text-white ${ring}`;
+  }
+  if (round.outcome === 'incorrect') return `bg-rose-500 text-white ${ring}`;
+  return isCurrent ? 'bg-slate-800 text-white ring-2 ring-slate-300' : 'bg-white text-slate-400 border border-slate-200';
+}
+
 /** 语言表达的练习台入口；认知模块复用同一个页面，只换 module */
 export default function KidExpressionPlay() {
   return <LessonPlayPage module={EXPRESSION_MODULE} />;
@@ -246,7 +268,10 @@ function DttSession({
   const [picks, setPicks] = useState<Record<string, string>>(() =>
     resolvePicks(target.materials, readPicks(scope, target.id)),
   );
-  const [showMaterials, setShowMaterials] = useState(true);
+  // 默认收起教具与备课细节，让平板首屏直接展示指令和判定按钮
+  const [showMaterials, setShowMaterials] = useState(false);
+  const [showGuideTips, setShowGuideTips] = useState(false);
+  const [mobilePane, setMobilePane] = useState<'bench' | 'chat'>('bench');
   /** 本节抽到的题（题库有 8 道，一节只练 4 道，按「多久没练过」轮换） */
   const [drawnIds, setDrawnIds] = useState<string[]>(() =>
     pickSessionTasks(target.tasks, SESSION_TASK_COUNT, readRotation(scope, student, target.id)).map((t) => t.id),
@@ -267,6 +292,7 @@ function DttSession({
   /** 当前试次阶段：等反应 → 待判定 → 出结果 */
   const [trialStage, setTrialStage] = useState<'await' | 'judge' | 'feedback'>('await');
   const [waitExpired, setWaitExpired] = useState(false);
+  const [waitBarGo, setWaitBarGo] = useState(false);
   const [lastJudge, setLastJudge] = useState<{ outcome: DttOutcome; promptLevel: DttPromptLevel } | null>(null);
   const [showPromptPicker, setShowPromptPicker] = useState(false);
   const [answerDraft, setAnswerDraft] = useState('');
@@ -282,18 +308,24 @@ function DttSession({
 
   const fontSize = profile.band === 'preschool' ? 21 : 18;
 
-  const spec = trials[Math.min(idx, trials.length - 1)];
+  const currentIdx = Math.min(idx, trials.length - 1);
+  const spec = trials[currentIdx];
   const currentTask = tasks[spec.taskIndex];
+  const currentRound = rounds[currentIdx];
+  const askCue = parseCue(currentTask.ask);
+  const hintCue = parseCue(currentTask.hint);
   const stats = computeDttStats(rounds.filter((r) => !r.skipped).map((r) => ({ outcome: r.outcome ?? null, promptLevel: r.promptLevel ?? null })));
+  const hasProgress = rounds.some((r) => r.achievement !== null || r.skipped);
 
   const pushCoach = useCallback(
-    (text: string) => {
-      setLines((prev) => [...prev, { id: newId('coach'), isKid: false, text }]);
-      if (voice.autoReadAloud && readAloud.supported) {
-        readAloud.speakNow(text, coach.member.id, undefined, 'zh-CN');
+    (text: string, speakText?: string) => {
+      const toSpeak = speakText !== undefined ? speakText : text;
+      setLines((prev) => [...prev, { id: newId('coach'), isKid: false, text, speakText: toSpeak }]);
+      if (voice.autoReadAloud && readAloud.supported && toSpeak.trim()) {
+        readAloud.speakNow(toSpeak, coach.member.id, undefined, 'zh-CN');
       }
     },
-    [readAloud, voice.autoReadAloud],
+    [coach.member.id, readAloud, voice.autoReadAloud],
   );
 
   /**
@@ -304,28 +336,37 @@ function DttSession({
   const startTrial = useCallback(
     (trialSpec: TrialSpec, taskList: ExpressionTask[] = tasks) => {
       const task = taskList[trialSpec.taskIndex];
+      const cue = parseCue(task.ask);
       setTrialStage('await');
       setWaitExpired(false);
       setShowPromptPicker(false);
       setAnswerDraft('');
-      pushCoach(`第 ${trialSpec.repeatIndex} 遍：${task.ask}`);
+      if (cue.spoken) {
+        pushCoach(`第 ${trialSpec.repeatIndex} 遍：${cue.spoken}`, cue.spoken);
+      } else {
+        pushCoach(`第 ${trialSpec.repeatIndex} 遍（情境）：${cue.setup}`, '');
+      }
       setTrialSeq((n) => n + 1);
     },
     [pushCoach, tasks],
   );
 
-  /** 等待窗由试次序号驱动：每个新试次重新计时 3 秒 */
+  /** 等待窗由试次序号驱动：每个新试次重新计时 3 秒并驱动线性进度条 */
   useEffect(() => {
     if (phase !== 'run' || trialStage !== 'await') return;
     setWaitExpired(false);
+    setWaitBarGo(false);
+    const raf = requestAnimationFrame(() => setWaitBarGo(true));
     const id = window.setTimeout(() => setWaitExpired(true), DTT_WAIT_MS);
-    return () => window.clearTimeout(id);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(id);
+    };
   }, [trialSeq, trialStage, phase]);
 
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
-    pushCoach(target.opener);
     startTrial(trials[0]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -375,7 +416,12 @@ function DttSession({
     persistRounds(nextRounds);
     const current = nextRounds[idx];
     if (current && current.achievement === null && !current.skipped) {
-      pushCoach(`换成「${name}」，我们重新来：第 ${spec.repeatIndex} 遍：${nextTasks[spec.taskIndex].ask}`);
+      const cue = parseCue(nextTasks[spec.taskIndex].ask);
+      if (cue.spoken) {
+        pushCoach(`换成「${name}」，第 ${spec.repeatIndex} 遍：${cue.spoken}`, cue.spoken);
+      } else {
+        pushCoach(`换成「${name}」，第 ${spec.repeatIndex} 遍（情境）：${cue.setup}`, '');
+      }
       setTrialStage('await');
       setWaitExpired(false);
       setShowPromptPicker(false);
@@ -398,7 +444,7 @@ function DttSession({
     persistRounds(nextTrials.map((s) => makeRound(s, nextTasks)));
     setIdx(0);
     setLines([]);
-    pushCoach('换一批题，我们重新开始。');
+    pushCoach('换一批题，我们重新开始。', '');
     startTrial(nextTrials[0], nextTasks);
   };
 
@@ -522,19 +568,124 @@ function DttSession({
     setPhase('saved');
   };
 
+  /** 判定按钮面板：在 await（直接判动作/口头）和 judge（记完原话后判）共用 */
+  const renderJudgeButtons = (includeNoResponse: boolean) => (
+    <div className="space-y-2.5" data-testid="dtt-judge">
+      <div className="grid grid-cols-3 gap-2.5">
+        <button
+          type="button"
+          onClick={() => judge('correct', 'independent')}
+          data-testid="judge-independent"
+          className="flex h-14 items-center justify-center gap-1.5 rounded-2xl bg-emerald-500 px-2.5 text-sm font-extrabold text-white shadow-sm transition hover:bg-emerald-600 active:scale-[0.98]"
+        >
+          <span
+            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/25 text-xs font-black"
+            aria-hidden
+          >
+            ✓
+          </span>
+          <span>独立正确</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowPromptPicker((v) => !v)}
+          data-testid="judge-prompted"
+          className={`flex h-14 items-center justify-center gap-1.5 rounded-2xl bg-amber-500 px-2.5 text-sm font-extrabold text-white shadow-sm transition hover:bg-amber-600 active:scale-[0.98] ${
+            showPromptPicker ? 'ring-2 ring-amber-300 ring-offset-1' : ''
+          }`}
+        >
+          <span
+            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/25 text-xs font-black"
+            aria-hidden
+          >
+            ◐
+          </span>
+          <span>提示后正确</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => judge('incorrect', 'independent')}
+          data-testid="judge-failed"
+          className="flex h-14 items-center justify-center gap-1.5 rounded-2xl bg-rose-500 px-2.5 text-sm font-extrabold text-white shadow-sm transition hover:bg-rose-600 active:scale-[0.98]"
+        >
+          <span
+            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/25 text-xs font-black"
+            aria-hidden
+          >
+            ✕
+          </span>
+          <span>错误</span>
+        </button>
+      </div>
+
+      {showPromptPicker && (
+        <div className="grid grid-cols-1 gap-2 rounded-2xl border border-amber-200 bg-amber-50/80 p-2.5 sm:grid-cols-3">
+          {DTT_PROMPT_LEVELS.filter((p) => p.value !== 'independent').map((p) => (
+            <button
+              key={p.value}
+              type="button"
+              onClick={() => judge('correct', p.value)}
+              data-testid={`prompt-${p.value}`}
+              className="flex h-14 flex-col items-center justify-center rounded-xl border border-amber-300 bg-white px-2 text-amber-800 shadow-sm transition hover:bg-amber-50"
+            >
+              <span className="text-xs font-extrabold">{p.label}</span>
+              <span className="max-w-full truncate text-[10px] font-medium text-amber-700/80">{p.desc}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {includeNoResponse && (
+        <button
+          type="button"
+          onClick={() => judge('no_response', 'independent')}
+          data-testid="judge-no-response"
+          className="flex h-12 w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-600 transition hover:bg-slate-50"
+        >
+          <span aria-hidden>⏳</span>
+          <span>等不到反应，记为无反应</span>
+        </button>
+      )}
+    </div>
+  );
+
   // ======================= 评审页 =======================
   if (phase === 'review') {
     const mastery = dttMasteryHint(stats);
+    const activeCount = rounds.filter((r) => !r.skipped).length;
+    const skippedCount = rounds.filter((r) => r.skipped).length;
     return (
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-8" data-testid="expression-review">
+      <div
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-[max(24px,env(safe-area-inset-bottom))]"
+        data-testid="expression-review"
+      >
         <div className="mx-auto w-full max-w-4xl space-y-4 py-3">
           <div className={`rounded-[28px] bg-gradient-to-r ${module.headerGradient} p-5 text-white shadow-lg`}>
-            <h1 className="text-2xl font-extrabold">填写这节课的记录</h1>
-            <p className="mt-1 text-sm opacity-95">
-              {target.id} {target.name} · DTT 已判定 {stats.total}/{rounds.filter((r) => !r.skipped).length} 试次
-              {rounds.some((r) => r.skipped) ? `（跳过 ${rounds.filter((r) => r.skipped).length} 题不计分）` : ''} · 独立正确{' '}
-              {stats.independentCorrect}（{Math.round(stats.independentRate * 100)}%）· 最长连续独立 {stats.maxIndependentStreak} 次
-            </p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h1 className="text-2xl font-extrabold">填写这节课的记录</h1>
+                <p className="mt-1 text-sm opacity-95">
+                  {target.id} {target.name} · {by}带练 · {student}
+                  {skippedCount > 0 ? ` · 已跳过 ${skippedCount} 题不计分` : ''}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <div className="rounded-2xl bg-white/20 px-3.5 py-2 text-center">
+                  <div className="text-xl font-extrabold">
+                    {stats.total}/{activeCount}
+                  </div>
+                  <div className="text-[11px] opacity-90">已判定试次</div>
+                </div>
+                <div className="rounded-2xl bg-white/20 px-3.5 py-2 text-center">
+                  <div className="text-xl font-extrabold">{Math.round(stats.independentRate * 100)}%</div>
+                  <div className="text-[11px] opacity-90">独立正确率</div>
+                </div>
+                <div className="rounded-2xl bg-white/20 px-3.5 py-2 text-center">
+                  <div className="text-xl font-extrabold">{stats.maxIndependentStreak}</div>
+                  <div className="text-[11px] opacity-90">最长连续独立</div>
+                </div>
+              </div>
+            </div>
           </div>
 
           {mastery && (
@@ -593,12 +744,12 @@ function DttSession({
                               ? a === 'independent'
                                 ? 'border-emerald-500 bg-emerald-500 text-white'
                                 : a === 'prompted'
-                                  ? 'border-amber-400 bg-amber-400 text-white'
-                                  : `${module.accent.ring} ${module.accent.solid} text-white`
+                                  ? 'border-amber-500 bg-amber-500 text-white'
+                                  : 'border-rose-500 bg-rose-500 text-white'
                               : 'border-slate-200 bg-white text-slate-500'
                           }`}
                         >
-                          {a === 'independent' ? '✅ 独立正确' : a === 'prompted' ? '🟡 提示后正确' : '❌ 错误 / 无反应'}
+                          {a === 'independent' ? '✓ 独立正确' : a === 'prompted' ? '◐ 提示后正确' : '✕ 错误 / 无反应'}
                         </button>
                       ))}
                     </div>
@@ -739,7 +890,7 @@ function DttSession({
   // ======================= 已保存 =======================
   if (phase === 'saved' && saved) {
     return (
-      <div className="flex flex-1 items-center justify-center px-4" data-testid="expression-saved">
+      <div className="flex flex-1 items-center justify-center px-4 pb-[max(24px,env(safe-area-inset-bottom))]" data-testid="expression-saved">
         <div className="w-full max-w-lg rounded-[32px] bg-white p-6 text-center shadow-lg">
           <div className="text-4xl">🎉</div>
           <h1 className="mt-2 text-2xl font-extrabold text-slate-800">记录已保存</h1>
@@ -760,39 +911,51 @@ function DttSession({
             </button>
           </div>
         </div>
-        {showExport && <RecordExportSheet session={saved} onClose={() => setShowExport(false)} />}
+        {showExport && (
+          <RecordExportSheet
+            session={saved}
+            accentClass={module.accent.solid}
+            onClose={() => setShowExport(false)}
+          />
+        )}
       </div>
     );
   }
 
   // ======================= 试次执行 =======================
   const feedbackCorrect = lastJudge?.outcome === 'correct';
+  const showBenchOnMobile = mobilePane === 'bench';
+  const firstAskCue = parseCue(tasks[0]?.ask ?? '');
+  const showOpenerNote = Boolean(target.opener.trim() && target.opener.trim() !== firstAskCue.spoken);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="expression-play" data-target={target.id} data-trial={idx + 1}>
-      <div className="flex shrink-0 items-center gap-3 px-4 pb-2">
-        <Link to={module.basePath} aria-label={`返回${module.title}`} className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-2xl shadow-sm">
+      {/* 顶部栏：与下方双栏和底部输入栏保持同宽对齐 */}
+      <div className="mx-auto flex w-full max-w-6xl shrink-0 items-center gap-2.5 px-4 pb-2 sm:gap-3">
+        <Link to={module.basePath} aria-label={`返回${module.title}`} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white text-2xl shadow-sm">
           ←
         </Link>
-        <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${module.accent.icon} text-3xl`} aria-hidden>{module.emoji}</div>
+        <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${module.accent.icon} text-2xl sm:text-3xl`} aria-hidden>
+          {module.emoji}
+        </div>
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-xl font-extrabold text-slate-800">
-            {target.id} {target.name}
-          </h1>
-          <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <h1 className="truncate text-lg font-extrabold text-slate-800 sm:text-xl">
+              {target.id} {target.name}
+            </h1>
             <span
-              className={`rounded px-1.5 py-0.5 text-[11px] font-extrabold ${
-                target.modality === 'receptive' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-500'
+              className={`rounded-lg px-1.5 py-0.5 text-[11px] font-extrabold ${
+                target.modality === 'receptive' ? 'bg-teal-50 text-teal-700 ring-1 ring-teal-200' : 'bg-slate-100 text-slate-600'
               }`}
             >
               {MODALITY_LABEL[target.modality]}
             </span>
-            <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-bold text-violet-700">
+            <span className="hidden rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600 sm:inline">
               VB-MAPP {target.vbMapp.tag}
             </span>
           </div>
           <div className="text-xs text-slate-500">
-            试次 {Math.min(idx + 1, trials.length)} / {trials.length} · 连续独立正确 {stats.currentStreak} 次 · {by}带练 · {student}
+            试次 {Math.min(idx + 1, trials.length)}/{trials.length} · 连续独立 {stats.currentStreak} 次 · {by}带练 · {student}
           </div>
         </div>
         {readAloud.supported && (
@@ -802,127 +965,228 @@ function DttSession({
               if (voice.autoReadAloud) readAloud.cancel();
               setVoicePrefs({ autoReadAloud: !voice.autoReadAloud });
             }}
-            className={`flex h-12 items-center gap-1.5 rounded-full px-4 text-sm font-bold shadow-sm ${
-              voice.autoReadAloud ? 'bg-sky-400 text-white' : 'bg-white text-slate-500'
+            className={`flex h-12 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-sm font-bold shadow-sm transition ${
+              voice.autoReadAloud ? `${module.accent.solid} text-white` : 'border border-slate-200 bg-white text-slate-600'
             }`}
           >
             <span aria-hidden>{voice.autoReadAloud ? '🔊' : '🔈'}</span>
-            <span>{voice.autoReadAloud ? '自动朗读' : '朗读关'}</span>
+            <span className="hidden sm:inline">{voice.autoReadAloud ? '自动朗读' : '朗读关'}</span>
           </button>
         )}
       </div>
 
-      <div className="grid min-h-0 flex-1 gap-4 px-4 pb-2 lg:grid-cols-2">
+      {/* 试次进度条 + 平板竖屏分栏切换 */}
+      <div className="mx-auto flex w-full max-w-6xl shrink-0 flex-wrap items-center justify-between gap-2 px-4 pb-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {rounds.map((r, i) => (
+            <span
+              key={r.taskId}
+              className={`flex h-6 min-w-6 items-center justify-center rounded-full px-1.5 text-[11px] font-extrabold transition ${trialChipColor(
+                r,
+                i === idx,
+              )}`}
+            >
+              {i + 1}
+            </span>
+          ))}
+          <span className="ml-1 text-xs font-bold text-slate-500">
+            独立率 {stats.total > 0 ? `${Math.round(stats.independentRate * 100)}%` : '—'}
+          </span>
+        </div>
+
+        <div className="flex overflow-hidden rounded-2xl border border-slate-200 bg-white/90 p-0.5 lg:hidden">
+          <button
+            type="button"
+            onClick={() => setMobilePane('bench')}
+            className={`flex h-12 items-center gap-1 rounded-xl px-3.5 text-xs font-extrabold transition ${
+              showBenchOnMobile ? `${module.accent.solid} text-white` : 'text-slate-600'
+            }`}
+          >
+            📋 练习操作台
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobilePane('chat')}
+            className={`flex h-12 items-center gap-1 rounded-xl px-3.5 text-xs font-extrabold transition ${
+              !showBenchOnMobile ? `${module.accent.solid} text-white` : 'text-slate-600'
+            }`}
+          >
+            📝 辅助与实录 ({lines.length})
+          </button>
+        </div>
+      </div>
+
+      {/* 主区域：宽屏 62/38 左右分栏，竖屏平板切换单栏 */}
+      <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col gap-4 px-4 pb-3 lg:grid lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)]">
         {/* 左：DTT 操作台 */}
-        <div className="flex min-h-0 flex-col gap-3 overflow-y-auto rounded-[32px] bg-white p-4 shadow-md">
-          {/* 教具：上课前选一次，全课题干自动替换，不用现场改词 */}
-          {target.materials.length > 0 && (
-            <div className="rounded-2xl bg-sky-50 px-3 py-2" data-testid="material-picker">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-xs font-bold text-sky-700">今天用什么教具</span>
+        <div
+          className={`${
+            showBenchOnMobile ? 'flex' : 'hidden lg:flex'
+          } min-h-0 flex-1 flex-col gap-4 overflow-y-auto rounded-[28px] border border-slate-200/70 bg-white p-4 shadow-sm sm:p-5`}
+        >
+          {/* Tier 1：统一清爽备课条 */}
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-500">每题</span>
+                <div className="flex overflow-hidden rounded-xl bg-slate-100 p-0.5">
+                  {[1, 2, 3].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => changeRepeats(n)}
+                      data-testid={`repeats-${n}`}
+                      className={`h-12 rounded-[10px] px-3.5 text-sm font-extrabold transition ${
+                        repeats === n ? `${module.accent.solid} text-white shadow-sm` : 'text-slate-600 hover:text-slate-800'
+                      }`}
+                    >
+                      {n}遍
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2" data-testid="task-pool">
+                <span className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-bold text-slate-600">
+                  本节抽到 {drawnIds.length} 道 / 题库共 {target.tasks.length} 道
+                </span>
                 <button
                   type="button"
-                  onClick={() => setShowMaterials((v) => !v)}
-                  data-testid="material-toggle"
-                  className="h-12 px-2 text-xs font-bold text-sky-600 underline"
+                  disabled={hasProgress}
+                  onClick={redraw}
+                  data-testid="redraw-tasks"
+                  title={hasProgress ? '本节已开始判定，如需换题请点左上角重进' : '从题库换一批没练过的题'}
+                  className="h-12 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  {showMaterials ? '收起' : '展开'}
+                  换一批
                 </button>
               </div>
-              {showMaterials ? (
-                target.materials.map((slot) => (
-                  <div key={slot.key} className="mt-2">
-                    <div className="text-[11px] font-bold text-slate-500">{slot.label}</div>
-                    <div className="mt-1 flex flex-wrap gap-1.5">
-                      {slot.options.map((opt) => (
-                        <button
-                          key={opt.name}
-                          type="button"
-                          onClick={() => changeMaterial(slot.key, opt.name)}
-                          data-testid={`material-${slot.key}-${opt.name}`}
-                          title={opt.note ?? ''}
-                          className={`h-12 rounded-full px-3 text-xs font-bold ${
-                            picks[slot.key] === opt.name ? 'bg-sky-500 text-white' : 'bg-white text-slate-600 shadow-sm'
-                          }`}
-                        >
-                          {opt.name}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="mt-1 text-[11px] leading-snug text-slate-400">都没有？{slot.fallback}</div>
+            </div>
+
+            {target.materials.length > 0 && (
+              <div className="rounded-xl border border-slate-200/70 bg-slate-50/80 px-3.5 py-1" data-testid="material-picker">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-600">
+                    🧸 教具：{materialLine(target.materials, picks)}
                   </div>
-                ))
-              ) : (
-                <div className="mt-1 truncate text-xs font-bold text-slate-500">{materialLine(target.materials, picks)}</div>
-              )}
-            </div>
-          )}
-
-          <div className={`flex flex-wrap items-center justify-between gap-2 rounded-2xl ${module.accent.soft} px-3 py-2`}>
-            <span className={`text-xs font-bold ${module.accent.text}`}>每道题练几遍</span>
-            <div className={`flex overflow-hidden rounded-xl border-2 ${module.accent.softBorder}`}>
-              {[1, 2, 3].map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => changeRepeats(n)}
-                  data-testid={`repeats-${n}`}
-                  className={`h-12 px-4 text-sm font-bold ${
-                    repeats === n ? `${module.accent.solid} text-white` : 'bg-white text-slate-500'
-                  }`}
-                >
-                  {n} 遍
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-violet-50 px-3 py-2" data-testid="task-pool">
-            <span className="text-xs font-bold text-violet-700">
-              本节抽到 {drawnIds.length} 道 / 题库共 {target.tasks.length} 道
-            </span>
-            <button
-              type="button"
-              onClick={redraw}
-              data-testid="redraw-tasks"
-              className="h-12 rounded-xl bg-white px-3 text-xs font-bold text-violet-600 shadow-sm"
-            >
-              换一批
-            </button>
-          </div>
-
-          <div className={`rounded-2xl border-2 ${module.accent.softBorder} bg-white p-4`}>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs font-bold text-slate-400">
-                第 {Math.min(idx + 1, trials.length)} 试次 · 第 {spec.repeatIndex} 遍
-              </span>
-              <span className="text-xs font-bold text-slate-400">2 分标准：{target.standard2}</span>
-            </div>
-            <div className="mt-2 text-xl font-extrabold leading-relaxed text-slate-800" data-testid="dtt-instruction">
-              {currentTask.ask}
-            </div>
-            <div className="mt-2 rounded-xl bg-amber-50 p-2.5 text-sm text-amber-800">
-              <span className="font-bold">辅助从轻到重：</span>
-              {DTT_PROMPT_LEVELS.filter((p) => p.value !== 'independent')
-                .map((p) => p.short)
-                .join(' → ')}
-              （给了就要往下退）
-            </div>
-            {target.modality === 'receptive' && (
-              <div className="mt-2 rounded-xl bg-slate-100 p-2.5 text-sm font-bold text-slate-700">
-                这条看动作，不要求开口：他没出声、但两步都做对了，就记独立正确。
+                  <button
+                    type="button"
+                    onClick={() => setShowMaterials((v) => !v)}
+                    data-testid="material-toggle"
+                    className={`h-12 shrink-0 px-2 text-sm font-bold ${module.accent.text} hover:underline`}
+                  >
+                    {showMaterials ? '收起' : '更换教具'}
+                  </button>
+                </div>
+                {showMaterials && (
+                  <div className="pb-2">
+                    {target.materials.map((slot) => (
+                      <div key={slot.key} className="mt-2">
+                        <div className="text-[11px] font-bold text-slate-500">{slot.label}</div>
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          {slot.options.map((opt) => (
+                            <button
+                              key={opt.name}
+                              type="button"
+                              onClick={() => changeMaterial(slot.key, opt.name)}
+                              data-testid={`material-${slot.key}-${opt.name}`}
+                              title={opt.note ?? ''}
+                              className={`h-12 rounded-full px-3 text-xs font-bold transition ${
+                                picks[slot.key] === opt.name
+                                  ? `${module.accent.solid} text-white shadow-sm`
+                                  : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                              }`}
+                            >
+                              {opt.name}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="mt-1 text-[11px] leading-snug text-slate-400">都没有？{slot.fallback}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
-            <div className="mt-2 rounded-xl bg-emerald-50 p-2.5 text-sm text-emerald-800">
-              <span className="font-bold">本次达标：</span>
-              {target.sessionSuccess}
+          </div>
+
+          {/* Tier 2：核心指令舞台卡 */}
+          <div className={`rounded-2xl border ${module.accent.softBorder} bg-gradient-to-b from-white to-slate-50/50 p-4 sm:p-5`}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`rounded-full ${module.accent.soft} px-3 py-1 text-xs font-extrabold ${module.accent.textStrong}`}>
+                  第 {Math.min(idx + 1, trials.length)} 试次 · 第 {spec.repeatIndex} 遍
+                </span>
+                {target.modality === 'receptive' && (
+                  <span className="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-bold text-teal-700 ring-1 ring-teal-200/80">
+                    👂 看动作，不要求开口
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowGuideTips((v) => !v)}
+                className="h-12 rounded-xl px-2.5 text-xs font-bold text-slate-500 transition hover:bg-slate-100"
+              >
+                {showGuideTips ? '收起提示标准' : '辅助顺序与达标口径'}
+              </button>
             </div>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {readAloud.supported && (
+
+            <div data-testid="dtt-instruction">
+              {askCue.setup && askCue.spoken ? (
+                <>
+                  <div className="mt-3 rounded-xl border border-slate-200/80 bg-slate-50 px-3.5 py-2.5 text-sm leading-relaxed text-slate-600">
+                    <span className="mr-2 inline-block rounded-md bg-white px-2 py-0.5 text-xs font-bold text-slate-500 ring-1 ring-slate-200/80">
+                      摆放 / 动作
+                    </span>
+                    {askCue.setup}
+                  </div>
+                  <div className="mt-3 text-[26px] font-extrabold leading-snug tracking-tight text-slate-900 sm:text-[30px]">
+                    {askCue.spoken}
+                  </div>
+                </>
+              ) : askCue.setup ? (
+                <div className="mt-3 space-y-2">
+                  <span className="inline-block rounded-md bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-600">
+                    情境与动作 · 暂不开口
+                  </span>
+                  <div className="text-xl font-extrabold leading-relaxed text-slate-800 sm:text-2xl">
+                    {askCue.setup}
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-3 text-[26px] font-extrabold leading-snug tracking-tight text-slate-900 sm:text-[30px]">
+                  {askCue.spoken}
+                </div>
+              )}
+            </div>
+
+            {showGuideTips && (
+              <div className="mt-3 space-y-1.5 text-xs">
+                <div className="rounded-xl bg-amber-50 p-2.5 text-amber-800">
+                  <span className="font-bold">辅助从轻到重：</span>
+                  {DTT_PROMPT_LEVELS.filter((p) => p.value !== 'independent')
+                    .map((p) => p.short)
+                    .join(' → ')}
+                  （给了就要往下退）
+                </div>
+                <div className="rounded-xl bg-emerald-50 p-2.5 text-emerald-800">
+                  <span className="font-bold">本次达标：</span>
+                  {target.sessionSuccess}
+                </div>
+                <div className="rounded-xl bg-slate-50 p-2.5 text-slate-500">
+                  <span className="font-bold">2 分标准：</span>
+                  {target.standard2}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {readAloud.supported && askCue.spoken && (
                 <button
                   type="button"
-                  onClick={() => readAloud.speakNow(currentTask.ask, coach.member.id, undefined, 'zh-CN')}
-                  className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-xl bg-sky-500 px-3 text-sm font-bold text-white"
+                  onClick={() => readAloud.speakNow(askCue.spoken, coach.member.id, undefined, 'zh-CN')}
+                  className={`flex h-12 min-w-[140px] flex-1 items-center justify-center gap-1.5 rounded-xl border ${module.accent.softBorder} ${module.accent.soft} px-3 text-sm font-extrabold ${module.accent.textStrong} transition hover:opacity-90`}
                 >
                   🔊 再说一遍指令
                 </button>
@@ -931,7 +1195,7 @@ function DttSession({
                 type="button"
                 onClick={skipCurrent}
                 data-testid="skip-trial"
-                className="flex h-12 flex-1 items-center justify-center rounded-xl border-2 border-slate-300 bg-white px-3 text-sm font-bold text-slate-600"
+                className="flex h-12 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
               >
                 这题跳过 →
               </button>
@@ -939,89 +1203,69 @@ function DttSession({
                 type="button"
                 onClick={enterReview}
                 data-testid="finish-practice"
-                className="flex h-12 flex-1 items-center justify-center rounded-xl bg-slate-800 px-3 text-sm font-bold text-white"
+                className="flex h-12 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
               >
                 提前收尾，去填记录 →
               </button>
             </div>
           </div>
 
+          {/* Tier 3：等待窗与判定操作台 */}
           {trialStage === 'await' && (
-            <>
+            <div className="space-y-3 border-t border-slate-100 pt-3.5">
               <div
-                className={`rounded-2xl p-3 text-sm font-bold ${waitExpired ? 'bg-amber-100 text-amber-800' : 'bg-slate-50 text-slate-500'}`}
+                className={`overflow-hidden rounded-xl border px-3.5 py-2.5 text-sm font-bold transition ${
+                  waitExpired ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-slate-200/80 bg-slate-50 text-slate-600'
+                }`}
                 data-testid="dtt-wait"
               >
-                {waitExpired
-                  ? '已等满 3 秒没反应 —— 现在给一级辅助，然后再等他一次。'
-                  : '说完就闭嘴，等 3 秒。他没反应不要重复指令。'}
+                <div className="flex items-center justify-between gap-2">
+                  <span>
+                    {waitExpired
+                      ? '已等满 3 秒没反应 —— 可参考右侧辅助提示，再等他一次。'
+                      : '说完就闭嘴，等 3 秒。他没反应不要重复指令。'}
+                  </span>
+                </div>
+                <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-slate-200/80">
+                  <div
+                    key={trialSeq}
+                    className={`h-full rounded-full transition-all ease-linear ${waitExpired ? 'bg-amber-500' : 'bg-slate-400'}`}
+                    style={{
+                      width: waitBarGo ? '100%' : '0%',
+                      transitionDuration: `${DTT_WAIT_MS}ms`,
+                    }}
+                  />
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={() => judge('no_response', 'independent')}
-                data-testid="judge-no-response"
-                className="flex h-12 items-center justify-center rounded-xl border-2 border-slate-300 bg-white text-sm font-bold text-slate-600"
-              >
-                ⏳ 等不到反应，记为无反应
-              </button>
-            </>
+
+              <div className="text-xs font-semibold text-slate-500">
+                {target.modality === 'receptive'
+                  ? '孩子做出动作后直接点判定（不用等他说话，也可在右侧勾选观察要点）：'
+                  : '孩子口头说完可直接点判定，或在下方语音/打字记下原话后再判：'}
+              </div>
+
+              {renderJudgeButtons(true)}
+            </div>
           )}
 
           {trialStage === 'judge' && (
-            <div className="rounded-2xl border-2 border-slate-200 p-3" data-testid="dtt-judge">
-              <div className="mb-2 text-xs font-bold text-slate-500">按刚才这一次反应判定，别掺上次的印象</div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => judge('correct', 'independent')}
-                  data-testid="judge-independent"
-                  className="flex h-14 flex-1 items-center justify-center rounded-xl bg-emerald-500 px-3 text-sm font-bold text-white"
-                >
-                  ✅ 独立正确
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowPromptPicker((v) => !v)}
-                  data-testid="judge-prompted"
-                  className="flex h-14 flex-1 items-center justify-center rounded-xl bg-amber-400 px-3 text-sm font-bold text-white"
-                >
-                  🟡 提示后正确
-                </button>
-                <button
-                  type="button"
-                  onClick={() => judge('incorrect', 'independent')}
-                  data-testid="judge-failed"
-                  className={`flex h-14 flex-1 items-center justify-center rounded-xl ${module.accent.solid} px-3 text-sm font-bold text-white`}
-                >
-                  ❌ 错误
-                </button>
+            <div className="space-y-3 border-t border-slate-100 pt-3.5">
+              <div className="rounded-xl border border-amber-200 bg-amber-50/70 px-3.5 py-2.5 text-sm font-bold text-slate-700">
+                已记录孩子原话：「{answerDraft}」
               </div>
-              {showPromptPicker && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {DTT_PROMPT_LEVELS.filter((p) => p.value !== 'independent').map((p) => (
-                    <button
-                      key={p.value}
-                      type="button"
-                      onClick={() => judge('correct', p.value)}
-                      data-testid={`prompt-${p.value}`}
-                      className="flex h-12 flex-1 items-center justify-center rounded-xl border-2 border-amber-300 bg-amber-50 px-3 text-xs font-bold text-amber-800"
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <div className="text-xs font-semibold text-slate-500">按刚才这一次反应判定，别掺上次的印象：</div>
+              {renderJudgeButtons(false)}
             </div>
           )}
 
           {trialStage === 'feedback' && lastJudge && (
             <div
-              className={`rounded-2xl border-2 p-3.5 ${feedbackCorrect ? 'border-emerald-300 bg-emerald-50' : 'border-slate-300 bg-slate-50'}`}
+              className={`rounded-2xl border p-4 ${feedbackCorrect ? 'border-emerald-200 bg-emerald-50/80' : 'border-slate-200 bg-slate-50'}`}
               data-testid="dtt-feedback"
             >
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-lg">{feedbackCorrect ? (lastJudge.promptLevel === 'independent' ? '⭐⭐' : '⭐') : '↩️'}</span>
-                <span className={`text-sm font-extrabold ${feedbackCorrect ? 'text-emerald-800' : 'text-slate-700'}`}>
+                <span className={`text-base font-extrabold ${feedbackCorrect ? 'text-emerald-800' : 'text-slate-700'}`}>
                   {feedbackCorrect
                     ? lastJudge.promptLevel === 'independent'
                       ? '独立正确'
@@ -1032,12 +1276,12 @@ function DttSession({
               <div className="mt-1 text-xs leading-relaxed text-slate-500">
                 {feedbackCorrect ? '结果出现要立刻给，超过 2 秒就不算即时强化了。' : '不批评、不追问原因，退回上一级辅助重来。'}
               </div>
-              <div className="mt-2.5 flex flex-wrap gap-2">
+              <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={retry}
                   data-testid="dtt-retry"
-                  className="flex h-12 flex-1 items-center justify-center rounded-xl bg-white text-sm font-bold text-slate-700 shadow-sm"
+                  className="flex h-12 flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700 transition hover:bg-slate-50"
                 >
                   {feedbackCorrect ? '🔁 再做一遍巩固' : '🔁 同一道题再来一遍'}
                 </button>
@@ -1045,7 +1289,7 @@ function DttSession({
                   type="button"
                   onClick={skipCurrent}
                   data-testid="skip-trial-feedback"
-                  className="flex h-12 items-center justify-center rounded-xl border-2 border-slate-200 bg-white px-3 text-sm font-bold text-slate-500"
+                  className="flex h-12 items-center justify-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-500 transition hover:bg-slate-50"
                 >
                   跳过
                 </button>
@@ -1053,7 +1297,7 @@ function DttSession({
                   type="button"
                   onClick={advance}
                   data-testid="dtt-next"
-                  className="flex h-12 flex-1 items-center justify-center rounded-xl bg-slate-800 text-sm font-bold text-white"
+                  className={`flex h-12 flex-1 items-center justify-center rounded-xl ${module.accent.solid} text-sm font-bold text-white shadow-sm transition hover:opacity-95`}
                 >
                   {idx + 1 >= trials.length ? '练习结束，去填记录 →' : '下一试次 →'}
                 </button>
@@ -1062,28 +1306,103 @@ function DttSession({
           )}
         </div>
 
-        {/* 右：对话记录 */}
-        <div className="flex min-h-0 flex-col rounded-[32px] bg-white/85 shadow-md">
-          <div className="border-b-2 border-slate-100 px-4 py-2 text-xs font-bold text-slate-400">孩子原话照录进记录，不改写、不补全</div>
-          <div ref={listRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-            {lines.map((m) => (
-              <ChatBubble
-                key={m.id}
-                isKid={m.isKid}
-                speakerName={m.isKid ? student : coach.member.name}
-                content={m.text}
-                companion={m.isKid ? undefined : coach}
-                fontSize={fontSize}
-                onReadAloud={!m.isKid && readAloud.supported ? () => readAloud.speakNow(m.text, coach.member.id, undefined, 'zh-CN') : undefined}
-              />
-            ))}
+        {/* 右：本试次观察要点与辅助提示 + 课堂实录 */}
+        <div
+          className={`${
+            showBenchOnMobile ? 'hidden lg:flex' : 'flex'
+          } min-h-0 flex-1 flex-col overflow-hidden rounded-[28px] border border-slate-200/70 bg-white shadow-sm`}
+        >
+          {(currentTask.checks.length > 0 || currentTask.hint) && (
+            <div className="shrink-0 space-y-3 border-b border-slate-100 bg-slate-50/40 p-4">
+              {currentTask.checks.length > 0 && currentRound && (
+                <div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-extrabold text-slate-700">本试次观察要点</span>
+                    <span className="text-[11px] font-semibold text-slate-400">
+                      已勾选 {currentRound.checksHit.length}/{currentTask.checks.length}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {currentTask.checks.map((c) => {
+                      const hit = currentRound.checksHit.includes(c);
+                      return (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => toggleCheck(currentRound, c)}
+                          className={`flex min-h-12 items-center gap-1.5 rounded-xl border px-3 py-1.5 text-left text-xs font-bold transition ${
+                            hit
+                              ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+                              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span aria-hidden>{hit ? '✓' : '○'}</span>
+                          <span>{c}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {currentTask.hint && (
+                <div
+                  className={`rounded-xl border px-3 py-2.5 text-xs transition ${
+                    waitExpired && trialStage === 'await'
+                      ? 'border-amber-300 bg-amber-50 text-amber-900'
+                      : 'border-amber-200/70 bg-amber-50/50 text-amber-900/90'
+                  }`}
+                >
+                  <div className="font-extrabold">💡 卡住时可以这样辅助</div>
+                  {hintCue.setup && <div className="mt-1 leading-relaxed text-amber-800/85">动作：{hintCue.setup}</div>}
+                  {hintCue.spoken && <div className="mt-1 font-bold leading-relaxed text-amber-950">提示语：{hintCue.spoken}</div>}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-2 text-xs">
+              <span className="font-bold text-slate-600">课堂实录</span>
+              <span className="text-[11px] text-slate-400">孩子原话照录，不改写</span>
+            </div>
+            <div ref={listRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+              {showOpenerNote && (
+                <div className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                  <span className="font-bold text-slate-600">开场引导：</span>
+                  {target.opener}
+                </div>
+              )}
+              {lines.map((m) => (
+                <ChatBubble
+                  key={m.id}
+                  isKid={m.isKid}
+                  speakerName={m.isKid ? student : coach.member.name}
+                  content={m.text}
+                  companion={m.isKid ? undefined : coach}
+                  fontSize={fontSize}
+                  onReadAloud={
+                    !m.isKid && readAloud.supported && (m.speakText ?? m.text).trim()
+                      ? () => readAloud.speakNow((m.speakText ?? m.text).trim(), coach.member.id, undefined, 'zh-CN')
+                      : undefined
+                  }
+                />
+              ))}
+            </div>
           </div>
         </div>
       </div>
 
       <KidInputBar
+        maxWidthClass="max-w-6xl"
         disabled={trialStage !== 'await'}
-        placeholder={trialStage === 'await' ? '按住说话，或者打字记下他的回答…' : '这一试次已记录'}
+        placeholder={
+          trialStage !== 'await'
+            ? '这一试次已记录，可点击上方进入下一试次'
+            : target.modality === 'receptive'
+              ? '可选：记录孩子做了什么动作，或直接点上方判定…'
+              : '按住说话，或者打字记下孩子的原话…'
+        }
         speechLang="zh-CN"
         onSend={submitAnswer}
       />

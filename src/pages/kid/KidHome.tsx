@@ -1,9 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { unlockParentArea } from '@/config/parentGate';
 import { isLessonAreaUnlocked, lessonUnlockLeftMinutes, unlockLessonArea } from '@/config/lessonGate';
-import { type LessonModule } from '@/config/lessonModules';
-import { EXPRESSION_MODULE, COGNITION_MODULE } from '@/config/lessonModules';
+import { COGNITION_MODULE, EXPRESSION_MODULE, type LessonModule } from '@/config/lessonModules';
 import { useKid } from './KidContext';
 import { CompanionAvatar } from './components/ChatBubble';
 import { LongPressRing, ParentGateDialog, useLongPress } from './components/ParentGate';
@@ -11,7 +10,7 @@ import { PLAYGROUND_CHAT_ID } from './kidRoutes';
 
 /**
  * 训练模块卡片：孩子不能自己进。
- * 没验证过要长按 1.5 秒才弹验证，验证过之后单击直接进。
+ * 没验证过只能长按 1.5 秒弹出验证（短按只给提示，防孩子误触）；验证过之后单击直接进。
  */
 function GatedLessonCard({
   module,
@@ -26,13 +25,31 @@ function GatedLessonCard({
   const unlocked = isLessonAreaUnlocked();
   const left = lessonUnlockLeftMinutes();
   const [open, setOpen] = useState(false);
+  const [tapHint, setTapHint] = useState(false);
+  const hintTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const completedRef = useRef(false);
+
   const press = useLongPress(() => {
+    completedRef.current = true;
+    clearTimeout(hintTimerRef.current);
+    setTapHint(false);
     if (!isLessonAreaUnlocked()) setOpen(true);
   });
 
-  const openGate = () => {
-    if (isLessonAreaUnlocked()) navigate(module.basePath);
-    else setOpen(true);
+  useEffect(() => () => clearTimeout(hintTimerRef.current), []);
+
+  const handleClick = () => {
+    if (isLessonAreaUnlocked()) {
+      navigate(module.basePath);
+      return;
+    }
+    if (completedRef.current) {
+      completedRef.current = false;
+      return;
+    }
+    setTapHint(true);
+    clearTimeout(hintTimerRef.current);
+    hintTimerRef.current = setTimeout(() => setTapHint(false), 1800);
   };
 
   return (
@@ -44,37 +61,73 @@ function GatedLessonCard({
         title="长按 1.5 秒进入 · 需家长或老师验证"
         onContextMenu={(e) => e.preventDefault()}
         style={{ touchAction: 'none', WebkitTouchCallout: 'none' }}
-        onPointerDown={press.start}
+        onPointerDown={(e) => {
+          completedRef.current = false;
+          if (!isLessonAreaUnlocked()) {
+            e.currentTarget.setPointerCapture?.(e.pointerId);
+            press.start();
+          }
+        }}
         onPointerUp={press.cancel}
-        onPointerLeave={press.cancel}
         onPointerCancel={press.cancel}
+        onLostPointerCapture={press.cancel}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            openGate();
+            if (isLessonAreaUnlocked()) navigate(module.basePath);
+            else setOpen(true);
           }
         }}
-        onClick={openGate}
-        className={`relative flex min-h-14 select-none items-center gap-3 overflow-hidden rounded-[32px] bg-gradient-to-r ${gradient} p-5 text-left text-white shadow-lg transition active:scale-[0.99]`}
+        onClick={handleClick}
+        className={`relative flex min-h-14 select-none items-center gap-3.5 overflow-hidden rounded-[28px] p-4 text-left transition active:scale-[0.99] ${
+          unlocked
+            ? `bg-gradient-to-r ${gradient} text-white shadow-md`
+            : 'border-2 border-slate-200/90 bg-white text-slate-800 shadow-sm hover:border-slate-300'
+        }`}
       >
-        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-3xl" aria-hidden>
+        <span
+          className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-3xl ${
+            unlocked ? 'bg-white/20' : `${module.accent.icon}`
+          }`}
+          aria-hidden
+        >
           {module.emoji}
         </span>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5 text-xl font-extrabold">
-            {module.title}
-            <span className="text-base" aria-hidden>{unlocked ? '🔓' : '🔒'}</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-lg font-extrabold">{module.title}</span>
+            <span
+              className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                unlocked ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+              }`}
+            >
+              {unlocked ? `🔓 已解锁 · 剩 ${left} 分` : '🔒 长按 1.5 秒'}
+            </span>
           </div>
-          <div className="text-sm opacity-95">
+          <div
+            className={`mt-0.5 truncate text-sm ${
+              press.pressing
+                ? unlocked
+                  ? 'font-bold text-white'
+                  : `font-bold ${module.accent.text}`
+                : tapHint
+                  ? 'font-bold text-amber-600'
+                  : unlocked
+                    ? 'text-white/90'
+                    : 'text-slate-500'
+            }`}
+          >
             {press.pressing
-              ? '别松手，马上到验证…'
-              : unlocked
-                ? `老师模式 · 还剩 ${left} 分钟`
-                : '老师带练 · 长按 1.5 秒进入'}
+              ? '别松手，马上进入验证…'
+              : tapHint
+                ? '为防孩子误触，请长按 1.5 秒进入验证'
+                : module.tagline}
           </div>
         </div>
-        <span className="text-2xl font-extrabold" aria-hidden>→</span>
-        <LongPressRing pressing={press.pressing} className="rounded-[32px]" />
+        <span className={`text-xl font-extrabold ${unlocked ? 'text-white' : 'text-slate-300'}`} aria-hidden>
+          →
+        </span>
+        <LongPressRing pressing={press.pressing} className="rounded-[28px]" />
       </button>
 
       {open && (
@@ -100,7 +153,7 @@ export default function KidHome() {
   const name = memory.nickname || '小朋友';
 
   return (
-    <div className="flex-1 overflow-y-auto px-5 pb-8 pt-2">
+    <div className="flex-1 overflow-y-auto px-5 pb-[max(32px,env(safe-area-inset-bottom))] pt-2">
       <h1 className="mb-5 text-center text-3xl font-extrabold text-slate-800">
         嗨，{name}！今天想和谁玩？
       </h1>
@@ -130,19 +183,19 @@ export default function KidHome() {
         </div>
       )}
 
-      {/* 主力创意与成长入口：绘本魔法屋、魔法画室 & 说说小课堂 */}
-      <div className="mx-auto mb-5 grid max-w-5xl grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-4">
+      {/* 儿童创意玩耍主力入口：绘本魔法屋 & 魔法画室 */}
+      <div className="mx-auto mb-5 grid max-w-5xl grid-cols-1 gap-4 md:grid-cols-2">
         <Link
           to="/books"
           data-testid="books-card"
-          className="flex items-center gap-3 rounded-[32px] bg-gradient-to-r from-violet-400 to-fuchsia-400 p-5 text-white shadow-lg transition active:scale-[0.99]"
+          className="flex items-center gap-4 rounded-[32px] bg-gradient-to-r from-violet-400 to-fuchsia-400 p-5 text-white shadow-lg transition hover:shadow-xl active:scale-[0.99]"
         >
-          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-3xl" aria-hidden>
+          <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-4xl" aria-hidden>
             📖
           </span>
           <div className="min-w-0 flex-1">
-            <div className="text-xl font-extrabold">绘本魔法屋</div>
-            <div className="text-sm opacity-95">共创 4 页中英双语绘本</div>
+            <div className="text-2xl font-extrabold">绘本魔法屋</div>
+            <div className="mt-0.5 text-sm opacity-95">共创 4 页中英双语有声绘本</div>
           </div>
           <span className="text-2xl font-extrabold" aria-hidden>→</span>
         </Link>
@@ -150,20 +203,17 @@ export default function KidHome() {
         <Link
           to="/draw"
           data-testid="draw-card"
-          className="flex items-center gap-3 rounded-[32px] bg-gradient-to-r from-sky-400 to-cyan-500 p-5 text-white shadow-lg transition active:scale-[0.99]"
+          className="flex items-center gap-4 rounded-[32px] bg-gradient-to-r from-sky-400 to-cyan-500 p-5 text-white shadow-lg transition hover:shadow-xl active:scale-[0.99]"
         >
-          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-3xl" aria-hidden>
+          <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-4xl" aria-hidden>
             🎨
           </span>
           <div className="min-w-0 flex-1">
-            <div className="text-xl font-extrabold">魔法画室</div>
-            <div className="text-sm opacity-95">说话与涂鸦变成绘本插画</div>
+            <div className="text-2xl font-extrabold">魔法画室</div>
+            <div className="mt-0.5 text-sm opacity-95">说话与涂鸦变成绘本插画</div>
           </div>
           <span className="text-2xl font-extrabold" aria-hidden>→</span>
         </Link>
-
-        <GatedLessonCard module={EXPRESSION_MODULE} gradient="from-rose-400 to-orange-400" testId="expression-card" />
-        <GatedLessonCard module={COGNITION_MODULE} gradient="from-indigo-400 to-violet-500" testId="cognition-card" />
       </div>
 
       <Link
@@ -215,6 +265,26 @@ export default function KidHome() {
         <span aria-hidden>🎲</span> 和小伙伴玩游戏
       </Link>
 
+      {/* 成人带练训练专区：视觉与孩子娱乐区分隔，避免孩子随手点入打乱课堂账本 */}
+      <section
+        aria-label="老师与家长带练专区"
+        className="mx-auto mt-6 max-w-5xl rounded-[32px] border-2 border-slate-200/80 bg-white/75 p-4 shadow-sm backdrop-blur"
+      >
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 px-1">
+          <div className="flex items-center gap-2 text-base font-extrabold text-slate-700">
+            <span aria-hidden>👩‍🏫</span>
+            <span>老师 / 家长带练专区</span>
+          </div>
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-500">
+            需长按 1.5 秒并验证进入 · 防孩子误触
+          </span>
+        </div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <GatedLessonCard module={EXPRESSION_MODULE} gradient="from-rose-400 to-orange-400" testId="expression-card" />
+          <GatedLessonCard module={COGNITION_MODULE} gradient="from-indigo-400 to-violet-500" testId="cognition-card" />
+        </div>
+      </section>
+
       <button
         type="button"
         data-testid="parent-entry"
@@ -234,7 +304,6 @@ export default function KidHome() {
           }}
         />
       )}
-
     </div>
   );
 }

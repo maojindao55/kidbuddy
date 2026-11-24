@@ -1,8 +1,16 @@
 import { useState } from 'react';
 import { buildSessionMarkdown, sessionFileName, type ExpressionSession } from '@/config/kidExpression';
 
-/** 把一份语言表达课时记录导出成可并入「上课记录」目录的 markdown */
-export function RecordExportSheet({ session, onClose }: { session: ExpressionSession; onClose: () => void }) {
+/** 把一份课时记录导出成可并入「上课记录」目录的 markdown */
+export function RecordExportSheet({
+  session,
+  accentClass = 'bg-rose-500',
+  onClose,
+}: {
+  session: ExpressionSession;
+  accentClass?: string;
+  onClose: () => void;
+}) {
   const [copied, setCopied] = useState(false);
   const md = buildSessionMarkdown(session);
   const fileName = sessionFileName(session);
@@ -28,8 +36,11 @@ export function RecordExportSheet({ session, onClose }: { session: ExpressionSes
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" data-testid="expression-export-sheet">
-      <div className="flex max-h-[86vh] w-full max-w-3xl flex-col rounded-[28px] bg-white p-5 shadow-2xl">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4 pb-[max(16px,env(safe-area-inset-bottom))]"
+      data-testid="expression-export-sheet"
+    >
+      <div className="flex max-h-[86vh] w-full max-w-3xl flex-col rounded-[28px] bg-white p-5 pb-[max(20px,env(safe-area-inset-bottom))] shadow-2xl">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 className="text-xl font-extrabold text-slate-800">课堂记录已生成</h2>
@@ -37,7 +48,14 @@ export function RecordExportSheet({ session, onClose }: { session: ExpressionSes
               文件名 <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">{fileName}</code>
             </p>
           </div>
-          <button type="button" onClick={onClose} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xl">✕</button>
+          <button
+            type="button"
+            aria-label="关闭导出弹窗"
+            onClick={onClose}
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xl font-bold text-slate-600"
+          >
+            ✕
+          </button>
         </div>
         <p className="mt-3 rounded-2xl bg-amber-50 p-3 text-xs leading-relaxed text-amber-800">
           这份 markdown 的 meta 块与四段文件名可直接被「上课记录」目录识别：存成同名文件后跑 <code>rebuild_index.py</code>，
@@ -45,13 +63,24 @@ export function RecordExportSheet({ session, onClose }: { session: ExpressionSes
         </p>
         <pre className="mt-3 min-h-0 flex-1 overflow-auto rounded-2xl bg-slate-900 p-4 text-xs leading-relaxed text-slate-100">{md}</pre>
         <div className="mt-4 flex flex-wrap gap-2">
-          <button type="button" onClick={() => void copy()} className="flex h-12 flex-1 items-center justify-center rounded-2xl bg-slate-800 px-4 text-sm font-bold text-white">
-            {copied ? '已复制 ✓' : '复制全文'}
+          <button
+            type="button"
+            onClick={() => void copy()}
+            className="flex h-12 flex-1 items-center justify-center rounded-2xl bg-slate-800 px-4 text-sm font-bold text-white"
+          >
+            {copied ? '已复制 ✓' : '📋 复制全文'}
           </button>
-          <button type="button" onClick={download} className="flex h-12 flex-1 items-center justify-center rounded-2xl bg-rose-500 px-4 text-sm font-bold text-white">
-            下载 .md
+          <button
+            type="button"
+            onClick={download}
+            className={`flex h-12 flex-1 items-center justify-center rounded-2xl ${accentClass} px-4 text-sm font-bold text-white`}
+          >
+            ⬇️ 下载 .md
           </button>
         </div>
+        <p className="mt-2 text-center text-[11px] text-slate-400">
+          平板端如不便保存本地文件，可点「复制全文」直接粘贴到备忘录或微信
+        </p>
       </div>
     </div>
   );
