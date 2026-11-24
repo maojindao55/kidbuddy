@@ -4,14 +4,17 @@ import KidLayout from './pages/kid/KidLayout';
 import KidHome from './pages/kid/KidHome';
 import KidChat from './pages/kid/KidChat';
 import KidDraw from './pages/kid/KidDraw';
-import KidEnglish from './pages/kid/KidEnglish';
-import KidEnglishPlay from './pages/kid/KidEnglishPlay';
+import KidExpression from './pages/kid/KidExpression';
+import KidExpressionPlay from './pages/kid/KidExpressionPlay';
+import KidCognition from './pages/kid/KidCognition';
+import KidCognitionPlay from './pages/kid/KidCognitionPlay';
 import KidStorybooks from './pages/kid/KidStorybooks';
 import KidStorybookCreate from './pages/kid/KidStorybookCreate';
 import KidStorybookRead from './pages/kid/KidStorybookRead';
 import { KidGameLevels, KidGameList } from './pages/kid/KidGames';
 import KidGamePlay from './pages/kid/KidGamePlay';
 import KidStars from './pages/kid/KidStars';
+import { LessonGuard } from './pages/kid/components/ParentGate';
 import ParentArea from './pages/parent';
 
 export const router = createBrowserRouter([
@@ -22,8 +25,10 @@ export const router = createBrowserRouter([
       { index: true, element: <KidHome /> },
       { path: 'chat/:chatId', element: <KidChat /> },
       { path: 'draw', element: <KidDraw /> },
-      { path: 'english', element: <KidEnglish /> },
-      { path: 'english/:sceneId', element: <KidEnglishPlay /> },
+      { path: 'expression', element: <LessonGuard><KidExpression /></LessonGuard> },
+      { path: 'expression/:targetId', element: <LessonGuard><KidExpressionPlay /></LessonGuard> },
+      { path: 'cognition', element: <LessonGuard><KidCognition /></LessonGuard> },
+      { path: 'cognition/:targetId', element: <LessonGuard><KidCognitionPlay /></LessonGuard> },
       { path: 'books', element: <KidStorybooks /> },
       { path: 'books/new', element: <KidStorybookCreate /> },
       { path: 'books/:bookId', element: <KidStorybookRead /> },

@@ -18,14 +18,47 @@ const routes = await read('../../routes.tsx');
 assert.match(routes, /path: '\/',\s*element: <KidLayout \/>/);
 assert.match(routes, /index: true, element: <KidHome \/>/);
 assert.match(routes, /path: 'draw'/);
-assert.match(routes, /path: 'english'/);
-assert.match(routes, /path: 'english\/:sceneId'/);
 assert.match(routes, /path: 'books'/);
 assert.match(routes, /path: 'books\/new'/);
 assert.match(routes, /path: 'books\/:bookId'/);
 assert.match(routes, /path: '\/parent'/);
 assert.match(routes, /<ParentArea \/>/);
 assert.doesNotMatch(routes, /path: '',\s*element: <Chat \/>/, 'adult chat is completely removed');
+// 英语岛模块整体下线：路由、页面、导航、首页卡片都不该再提到它
+assert.doesNotMatch(routes, /english/i, '英语岛路由已移除');
+await assert.rejects(access(new URL('./KidEnglish.tsx', import.meta.url)), { code: 'ENOENT' }, 'KidEnglish.tsx 已删除');
+await assert.rejects(access(new URL('./KidEnglishPlay.tsx', import.meta.url)), { code: 'ENOENT' }, 'KidEnglishPlay.tsx 已删除');
+
+const kidLayout = await read('./KidLayout.tsx');
+assert.doesNotMatch(kidLayout, /english/i, '底部导航不再有英语岛');
+assert.doesNotMatch(kidLayout, /\/expression/, '说说小课堂不放在儿童导航里，避免孩子随手点进去');
+const kidHome = await read('./KidHome.tsx');
+assert.doesNotMatch(kidHome, /english/i, '首页不再有英语岛入口');
+
+// 说说小课堂：孩子不能自己进，卡片要长按 1.5 秒 + 家长/老师验证
+assert.doesNotMatch(kidHome, /to="\/expression"/, '卡片不能是可点的 Link');
+assert.match(kidHome, /testId="expression-card"/);
+assert.match(kidHome, /useLongPress\(/, '卡片走长按，不是单击');
+assert.match(kidHome, /title="课堂入口验证"/, '要点明这是课堂入口验证');
+assert.match(kidHome, /unlockLessonArea\(\)/, '验证通过才解锁课堂');
+assert.match(routes, /<LessonGuard><KidExpression \/><\/LessonGuard>/, '目标列表要守卫');
+assert.match(routes, /<LessonGuard><KidExpressionPlay \/><\/LessonGuard>/, '练习台要守卫');
+assert.match(routes, /<LessonGuard><KidCognition \/><\/LessonGuard>/, '认知列表也要守卫');
+assert.match(routes, /<LessonGuard><KidCognitionPlay \/><\/LessonGuard>/, '认知练习台也要守卫');
+assert.match(kidHome, /testId="cognition-card"/, '首页要有认知理解卡片');
+// 两个模块共用同一套页面与门禁，只换配置
+const modules = await read('../../config/lessonModules.ts');
+assert.match(modules, /export const EXPRESSION_MODULE/);
+assert.match(modules, /export const COGNITION_MODULE/);
+assert.match(modules, /kidbuddy\.expression\.book\.v1/);
+assert.match(modules, /kidbuddy\.cognition\.book\.v1/, '认知要有自己的账本 key，不能和表达混');
+const expressionPage = await read('./KidExpression.tsx');
+assert.match(expressionPage, /data-testid="lock-lesson"/, '页面里要能手动结束课堂');
+assert.match(expressionPage, /lockLessonArea\(\)/, '结束课堂要真的上锁');
+const cognitionPage = await read('./KidCognition.tsx');
+assert.match(cognitionPage, /LessonTargetsPage/, '认知列表复用同一个列表页');
+const cognitionPlay = await read('./KidCognitionPlay.tsx');
+assert.match(cognitionPlay, /LessonPlayPage/, '认知练习复用同一个练习台');
 
 // 旧版成人角色群聊目录已彻底移除
 await assert.rejects(access(new URL('../chat/', import.meta.url)), { code: 'ENOENT' }, 'src/pages/chat must be deleted');
@@ -36,11 +69,19 @@ assert.match(parent, /<Navigate to="\/" replace \/>/);
 assert.doesNotMatch(parent, /from '\.\.\/chat'/, 'parent area no longer reuses old adult chat');
 
 const gate = await read('./components/ParentGate.tsx');
-assert.match(gate, /LONG_PRESS_MS = 1500/);
+// 家长入口要长按 1.5 秒才弹验证（防孩子误触），角标上必须写明「长按」
+assert.match(gate, /LONG_PRESS_MS = 1500/, '长按 1.5 秒');
+assert.match(gate, /onPointerDown=/, '按住开始计时');
+assert.match(gate, /onPointerUp=\{cancel\}|onPointerLeave=\{cancel\}/, '松手/移出要取消计时');
+assert.match(gate, /BADGE_LABEL = '长按'/, '角标要写明「长按」，否则家长只会点一下');
+assert.match(gate, /aria-label="家长中心（长按 1\.5 秒进入）"/, '无障碍名称要说清长按');
 assert.match(gate, /checkChallengeAnswer/);
 assert.match(gate, /unlockParentArea\(\)/);
 assert.match(gate, /hasParentPin/);
 assert.match(gate, /verifyParentPin/);
+// 首页底部还要有一个文字入口，避免家长找不到左上角的角标
+assert.match(kidHome, /data-testid="parent-entry"/, '首页要有家长中心文字入口');
+assert.match(kidHome, /<ParentGateDialog/, '首页入口也要过验证');
 
 // 护眼时长遮罩
 const layout = await read('./KidLayout.tsx');
@@ -86,5 +127,50 @@ assert.match(input, /recognizer\.supported &&/);
 assert.match(input, /voice\.inputMode === 'voice' && recognizer\.supported/);
 assert.match(input, /addEventListener\('keydown'/);
 assert.match(input, /Space/);
+
+// 说说小课堂：目标按学段分组显示，但圆圈数字必须是全表台阶（target.difficulty），
+// 不能按列表下标重新编号——否则段内会出现「4 比 6 容易」的错觉。
+const exprHome = await read('./KidExpression.tsx');
+assert.match(exprHome, /stageGroups\(/, '目标列表要按学段分组');
+assert.match(exprHome, /expression-step-/, '目标卡要显示台阶编号');
+assert.match(exprHome, /\{target\.difficulty\}/, '台阶编号必须直接用 difficulty');
+assert.doesNotMatch(exprHome, /step=\{i \+ 1\}/, '不允许按列表下标重新编号');
+assert.match(exprHome, /stage-filter-/, '要有学段筛选');
+assert.match(exprHome, /\$\{scope\}\.stage/, '学段选择要记住（键挂在模块前缀下）');
+assert.match(exprHome, /expression-modality-/, '卡片要显示听/说标记');
+assert.match(exprHome, /MODALITY_LABEL/, '听/说标记要用统一文案');
+// 台阶上限写成常量：曾经写死「/ 10」，补到 11 条后文案就错了。
+assert.doesNotMatch(exprHome, /\/\s*10\b/, '台阶总数不能写死，要用 EXPRESSION_TARGETS_BY_STAGE.length');
+const exprPlay = await read('./KidExpressionPlay.tsx');
+assert.match(exprPlay, /MODALITY_LABEL/, '练习页也要显示听/说标记');
+assert.match(exprPlay, /modality === 'receptive'/, '听者反应类目标要有「看动作不要求开口」的说明');
+// 教具不能写死在题干里：一律走 fillSlots 替换，且选择要记住
+assert.match(exprPlay, /fillSlots/, '题干必须经过教具槽位替换');
+assert.match(exprPlay, /material-picker/, '练习页要能选今天的教具');
+assert.match(exprPlay, /\$\{scope\}\.materials/, '教具选择要记住，换课不用重选');
+assert.match(exprPlay, /materials: picks/, '记录里要存下实际用的教具');
+// 题量控制：跳过不计分，且改遍数不能把已判定的试次清掉
+assert.match(exprPlay, /skipCurrent/, '要有单题跳过');
+assert.match(exprPlay, /skip-trial/, '跳过按钮要可点');
+assert.match(exprPlay, /skipped: true/, '跳过要写进记录，不能只是界面消失');
+// 改遍数不能整节课清空重来；「换一批」是重新抽题，清空是应该的，所以只查 changeRepeats 函数体
+{
+  const start = exprPlay.indexOf('const changeRepeats');
+  const end = exprPlay.indexOf('const changeMaterial', start);
+  assert.ok(start > 0 && end > start, '找不到 changeRepeats 函数');
+  const body = exprPlay.slice(start, end);
+  assert.doesNotMatch(body, /setIdx\(0\)/, '改遍数不允许把当前试次重置回第一题');
+  assert.doesNotMatch(body, /setLines\(\[\]\)/, '改遍数不允许清空对话记录');
+  assert.match(body, /kept/, '改遍数要保留已判定的试次');
+}
+// 反馈页不管对错都要能再练一遍
+assert.doesNotMatch(exprPlay, /\{!feedbackCorrect && \(\s*<button/, '答对也要能加练一遍');
+
+// 题库轮换：一节只抽 4 道，练过的往后排
+assert.match(exprPlay, /pickSessionTasks/, '练习页要按轮换抽题');
+assert.match(exprPlay, /task-pool/, '要显示本节抽到几道 / 题库共几道');
+assert.match(exprPlay, /redraw-tasks/, '要有「换一批」');
+assert.match(exprPlay, /\$\{scope\}\.rotation/, '轮换记录要存本地，不然每次都是同一批');
+assert.doesNotMatch(exprPlay, /fillTasks\(target\.tasks/, '换教具时只能重填本节抽到的题，不能重填整个题库');
 
 console.log('kidUi.test.mjs: ok');

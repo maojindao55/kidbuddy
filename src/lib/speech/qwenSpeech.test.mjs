@@ -75,19 +75,18 @@ const aiMembersSource = await readFile(new URL('../../config/aiMembers.ts', impo
 
 // ---- 音色：按模型取伙伴的默认音色，家长可统一覆盖 ----
 {
-  const ids = ['kid-curious-doctor', 'kid-story-fairy', 'kid-math-bear', 'kid-drawing-bunny', 'kid-english-sunny'];
-  for (const id of ids.slice(0, 4)) assert.ok(aiMembersSource.includes(`id: '${id}'`), `伙伴 ${id} 存在`);
+  const ids = ['kid-curious-doctor', 'kid-story-fairy', 'kid-math-bear', 'kid-drawing-bunny'];
+  for (const id of ids) assert.ok(aiMembersSource.includes(`id: '${id}'`), `伙伴 ${id} 存在`);
   const withModel = (model) => config.normalizeSpeechConfig({ tts: { engine: model.startsWith('qwen-audio-3.0') ? 'tokenplan' : 'qwen', model } });
   const cases = {
-    'qwen-audio-3.0-tts-plus': { bear: 'longanlufeng', fairy: 'longanlingxin', sunny: 'longanlingxin', fallback: 'longanlingxin' },
-    'qwen-audio-3.1-tts-flash': { bear: 'longniuniu_v3.1', fairy: 'longshanshan_v3.1', sunny: 'longling_v3.1', fallback: 'longke_v3.1' },
-    'cosyvoice-v3-flash': { bear: 'longniuniu_v3', fairy: 'longshanshan_v3', sunny: 'longling_v3', fallback: 'longhuhu_v3' },
+    'qwen-audio-3.0-tts-plus': { bear: 'longanlufeng', fairy: 'longanlingxin', fallback: 'longanlingxin' },
+    'qwen-audio-3.1-tts-flash': { bear: 'longniuniu_v3.1', fairy: 'longshanshan_v3.1', fallback: 'longke_v3.1' },
+    'cosyvoice-v3-flash': { bear: 'longniuniu_v3', fairy: 'longshanshan_v3', fallback: 'longhuhu_v3' },
   };
   for (const [model, expected] of Object.entries(cases)) {
     const c = withModel(model);
     assert.equal(config.voiceForSpeaker(c, 'kid-math-bear'), expected.bear, model);
     assert.equal(config.voiceForSpeaker(c, 'kid-story-fairy'), expected.fairy, model);
-    assert.equal(config.voiceForSpeaker(c, 'kid-english-sunny'), expected.sunny, model);
     assert.equal(config.voiceForSpeaker(c, 'unknown'), expected.fallback, model);
     const catalog = config.voiceCatalog(model);
     const options = new Set(catalog.options.map((v) => v.value));
@@ -280,11 +279,10 @@ const aiMembersSource = await readFile(new URL('../../config/aiMembers.ts', impo
   assert.equal(config.voiceCatalog('qwen-audio-3.0-tts-plus').companions['kid-story-fairy'] !== undefined, true);
   assert.equal(config.dialogVoiceFor(cloud, 'kid-story-fairy'), 'longanlingxi');
   assert.equal(config.dialogVoiceFor(cloud, 'kid-drawing-bunny'), 'longanxiaoxin');
-  assert.equal(config.dialogVoiceFor(cloud, 'kid-english-sunny'), 'longanxiaoxin');
   assert.equal(config.dialogVoiceFor(cloud, 'someone-else'), 'longanqian');
 
-  const sunnyCustom = config.withCustomVoice(cloud, 'kid-english-sunny', 'longanlingxi', cloud.dialog.model);
-  assert.equal(config.dialogVoiceFor(sunnyCustom, 'kid-english-sunny'), 'longanlingxi');
+  const bearCustom = config.withCustomVoice(cloud, 'kid-math-bear', 'longanlingxi', cloud.dialog.model);
+  assert.equal(config.dialogVoiceFor(bearCustom, 'kid-math-bear'), 'longanlingxi');
 
   const custom = config.withCustomVoice(cloud, 'kid-story-fairy', ' my-clone-1 ', cloud.dialog.model);
   assert.equal(config.dialogVoiceFor(custom, 'kid-story-fairy'), 'my-clone-1');

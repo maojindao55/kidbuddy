@@ -1,12 +1,102 @@
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { unlockParentArea } from '@/config/parentGate';
+import { isLessonAreaUnlocked, lessonUnlockLeftMinutes, unlockLessonArea } from '@/config/lessonGate';
+import { type LessonModule } from '@/config/lessonModules';
+import { EXPRESSION_MODULE, COGNITION_MODULE } from '@/config/lessonModules';
 import { useKid } from './KidContext';
 import { CompanionAvatar } from './components/ChatBubble';
+import { LongPressRing, ParentGateDialog, useLongPress } from './components/ParentGate';
 import { PLAYGROUND_CHAT_ID } from './kidRoutes';
+
+/**
+ * 训练模块卡片：孩子不能自己进。
+ * 没验证过要长按 1.5 秒才弹验证，验证过之后单击直接进。
+ */
+function GatedLessonCard({
+  module,
+  gradient,
+  testId,
+}: {
+  module: LessonModule;
+  gradient: string;
+  testId: string;
+}) {
+  const navigate = useNavigate();
+  const unlocked = isLessonAreaUnlocked();
+  const left = lessonUnlockLeftMinutes();
+  const [open, setOpen] = useState(false);
+  const press = useLongPress(() => {
+    if (!isLessonAreaUnlocked()) setOpen(true);
+  });
+
+  const openGate = () => {
+    if (isLessonAreaUnlocked()) navigate(module.basePath);
+    else setOpen(true);
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        data-testid={testId}
+        aria-label={`${module.title}（长按 1.5 秒，需家长或老师验证）`}
+        title="长按 1.5 秒进入 · 需家长或老师验证"
+        onContextMenu={(e) => e.preventDefault()}
+        style={{ touchAction: 'none', WebkitTouchCallout: 'none' }}
+        onPointerDown={press.start}
+        onPointerUp={press.cancel}
+        onPointerLeave={press.cancel}
+        onPointerCancel={press.cancel}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            openGate();
+          }
+        }}
+        onClick={openGate}
+        className={`relative flex min-h-14 select-none items-center gap-3 overflow-hidden rounded-[32px] bg-gradient-to-r ${gradient} p-5 text-left text-white shadow-lg transition active:scale-[0.99]`}
+      >
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-3xl" aria-hidden>
+          {module.emoji}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 text-xl font-extrabold">
+            {module.title}
+            <span className="text-base" aria-hidden>{unlocked ? '🔓' : '🔒'}</span>
+          </div>
+          <div className="text-sm opacity-95">
+            {press.pressing
+              ? '别松手，马上到验证…'
+              : unlocked
+                ? `老师模式 · 还剩 ${left} 分钟`
+                : '老师带练 · 长按 1.5 秒进入'}
+          </div>
+        </div>
+        <span className="text-2xl font-extrabold" aria-hidden>→</span>
+        <LongPressRing pressing={press.pressing} className="rounded-[32px]" />
+      </button>
+
+      {open && (
+        <ParentGateDialog
+          title="课堂入口验证"
+          description={`${module.title}是老师带孩子练的训练台，请家长或老师验证后进入。验证后 30 分钟内不用再验证。`}
+          onClose={() => setOpen(false)}
+          onSuccess={() => {
+            unlockLessonArea();
+            setOpen(false);
+            navigate(module.basePath);
+          }}
+        />
+      )}
+    </>
+  );
+}
 
 export default function KidHome() {
   const navigate = useNavigate();
   const { companions, companionsLoading, memory, aiConfigured, aiConfigChecked } = useKid();
+  const [gateOpen, setGateOpen] = useState(false);
   const name = memory.nickname || '小朋友';
 
   return (
@@ -40,8 +130,8 @@ export default function KidHome() {
         </div>
       )}
 
-      {/* 主力创意与成长入口：绘本魔法屋、英语冒险岛 & 魔法画室 */}
-      <div className="mx-auto mb-5 grid max-w-5xl grid-cols-1 gap-4 md:grid-cols-3">
+      {/* 主力创意与成长入口：绘本魔法屋、魔法画室 & 说说小课堂 */}
+      <div className="mx-auto mb-5 grid max-w-5xl grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-4">
         <Link
           to="/books"
           data-testid="books-card"
@@ -53,21 +143,6 @@ export default function KidHome() {
           <div className="min-w-0 flex-1">
             <div className="text-xl font-extrabold">绘本魔法屋</div>
             <div className="text-sm opacity-95">共创 4 页中英双语绘本</div>
-          </div>
-          <span className="text-2xl font-extrabold" aria-hidden>→</span>
-        </Link>
-
-        <Link
-          to="/english"
-          data-testid="english-card"
-          className="flex items-center gap-3 rounded-[32px] bg-gradient-to-r from-emerald-400 to-teal-500 p-5 text-white shadow-lg transition active:scale-[0.99]"
-        >
-          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-3xl" aria-hidden>
-            🦜
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="text-xl font-extrabold">英语冒险岛</div>
-            <div className="text-sm opacity-95">6 大情景任务开口说英语</div>
           </div>
           <span className="text-2xl font-extrabold" aria-hidden>→</span>
         </Link>
@@ -86,6 +161,9 @@ export default function KidHome() {
           </div>
           <span className="text-2xl font-extrabold" aria-hidden>→</span>
         </Link>
+
+        <GatedLessonCard module={EXPRESSION_MODULE} gradient="from-rose-400 to-orange-400" testId="expression-card" />
+        <GatedLessonCard module={COGNITION_MODULE} gradient="from-indigo-400 to-violet-500" testId="cognition-card" />
       </div>
 
       <Link
@@ -136,6 +214,27 @@ export default function KidHome() {
       >
         <span aria-hidden>🎲</span> 和小伙伴玩游戏
       </Link>
+
+      <button
+        type="button"
+        data-testid="parent-entry"
+        onClick={() => setGateOpen(true)}
+        className="mx-auto mt-4 flex h-12 items-center justify-center gap-2 rounded-2xl px-4 text-sm font-semibold text-slate-400 transition hover:bg-white/70 hover:text-slate-600"
+      >
+        <span aria-hidden>⚙️</span> 家长中心（需家长验证）
+      </button>
+
+      {gateOpen && (
+        <ParentGateDialog
+          onClose={() => setGateOpen(false)}
+          onSuccess={() => {
+            unlockParentArea();
+            setGateOpen(false);
+            navigate('/parent');
+          }}
+        />
+      )}
+
     </div>
   );
 }

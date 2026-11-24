@@ -10,6 +10,9 @@ const skipDirs = new Set(['node_modules', 'target', 'dist', 'gen']);
 
 function collect(dir, out) {
   for (const entry of readdirSync(dir)) {
+    // 「._」开头是 macOS 在外置 exFAT/NTFS 盘上生成的 AppleDouble 元数据，
+    // 不是真文件，但名字也以 .test.mjs 结尾，会被误当测试跑成 SyntaxError。
+    if (entry.startsWith('._')) continue;
     if (skipDirs.has(entry)) continue;
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) collect(full, out);

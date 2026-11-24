@@ -7,7 +7,6 @@ import { ParentCornerBadge, ParentGateDialog } from './components/ParentGate';
 const navItems = [
   { to: '/', label: '小伙伴', emoji: '🏠', end: true },
   { to: '/books', label: '绘本屋', emoji: '📖', end: false },
-  { to: '/english', label: '英语岛', emoji: '🦜', end: false },
   { to: '/draw', label: '魔法画室', emoji: '🎨', end: false },
   { to: '/games', label: '小游戏', emoji: '🎲', end: false },
   { to: '/stars', label: '我的星星', emoji: '⭐', end: false },
@@ -113,14 +112,14 @@ function KidShell() {
     >
       <header className="flex shrink-0 items-center gap-3 px-4 pb-2 pt-[max(12px,env(safe-area-inset-top))]">
         <ParentCornerBadge />
-        <nav className="flex flex-1 justify-center gap-2" aria-label="儿童导航">
+        <nav className="flex min-w-0 flex-1 justify-center gap-1.5 overflow-x-auto xl:gap-2" aria-label="儿童导航">
           {navItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               end={item.end}
               className={({ isActive }) =>
-                `flex min-h-14 items-center gap-1.5 rounded-full px-3.5 text-base font-bold transition lg:px-4 lg:text-lg ${
+                `flex min-h-14 shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 text-[15px] font-bold transition xl:gap-1.5 xl:px-4 xl:text-lg ${
                   isActive ? 'bg-amber-400 text-white shadow-md' : 'bg-white/70 text-slate-600'
                 }`
               }

@@ -21,7 +21,7 @@ import {
   type StoryCoverPlan,
   type StoryPagePlan,
 } from '@/config/kidArt';
-import { buildBilingualBookPrompt, parseBilingualBookResponse } from '@/config/kidEnglish';
+import { buildBilingualBookPrompt, parseBilingualBookResponse } from '@/config/kidBilingualBook';
 import { loadImageConfig } from '@/config/tokenPlan';
 import { resolveCompanionCredentials } from '@/utils/companionCredentials';
 import { isTauri } from '@/utils/isTauri';

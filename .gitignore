@@ -26,3 +26,11 @@ src-tauri/target/
 *.sln
 *.sw?
 .qoder/*
+
+# macOS 在外置 exFAT/NTFS 盘上生成的 AppleDouble 元数据，不是源码
+._*
+tsconfig.node.tsbuildinfo
+# cargo 偶尔会留下 targetXXXX 形式的临时目录
+src-tauri/target*/
+# cargo 偶尔会留下 targetXXXX 形式的临时目录
+src-tauri/target*/

@@ -99,7 +99,6 @@ const VOICE_CATALOGS: Record<'tokenplan' | 'realtime-3.0' | 'qwen-audio-3.1' | '
       'kid-story-fairy': 'longanlingxi',
       'kid-math-bear': 'longanlufeng',
       'kid-drawing-bunny': 'longanxiaoxin',
-      'kid-english-sunny': 'longanxiaoxin',
     },
     fallback: 'longanqian',
     options: [
@@ -117,7 +116,6 @@ const VOICE_CATALOGS: Record<'tokenplan' | 'realtime-3.0' | 'qwen-audio-3.1' | '
       'kid-story-fairy': 'longanlingxin',
       'kid-math-bear': 'longanlufeng',
       'kid-drawing-bunny': 'longanlingxin',
-      'kid-english-sunny': 'longanlingxin',
     },
     fallback: 'longanlingxin',
     options: [
@@ -131,7 +129,6 @@ const VOICE_CATALOGS: Record<'tokenplan' | 'realtime-3.0' | 'qwen-audio-3.1' | '
       'kid-story-fairy': 'longshanshan_v3.1',
       'kid-math-bear': 'longniuniu_v3.1',
       'kid-drawing-bunny': 'longpaopao_v3.1',
-      'kid-english-sunny': 'longling_v3.1',
     },
     fallback: 'longke_v3.1',
     options: [
@@ -149,7 +146,6 @@ const VOICE_CATALOGS: Record<'tokenplan' | 'realtime-3.0' | 'qwen-audio-3.1' | '
       'kid-story-fairy': 'longshanshan_v3',
       'kid-math-bear': 'longniuniu_v3',
       'kid-drawing-bunny': 'longhuhu_v3',
-      'kid-english-sunny': 'longling_v3',
     },
     fallback: 'longhuhu_v3',
     options: [
