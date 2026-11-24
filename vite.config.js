@@ -47,7 +47,7 @@ export default defineConfig(function () { return __awaiter(void 0, void 0, void 
                 server: {
                     port: 1420,
                     strictPort: true,
-                    host: host || false,
+                    host: host || "0.0.0.0",
                     hmr: host
                         ? {
                             protocol: "ws",
@@ -65,7 +65,7 @@ export default defineConfig(function () { return __awaiter(void 0, void 0, void 
                     },
                 },
                 build: {
-                    target: "esnext",
+                    target: ["es2020", "chrome100", "safari15"],
                     minify: "esbuild",
                     outDir: "dist"
                 }

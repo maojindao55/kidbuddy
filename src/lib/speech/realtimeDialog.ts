@@ -67,9 +67,19 @@ export class PcmStreamPlayer {
     return this.context;
   }
 
+  warmUp(): void {
+    const ctx = this.ensureContext();
+    if (ctx.state === 'suspended') {
+      void ctx.resume().catch(() => undefined);
+    }
+  }
+
   push(samples: Float32Array): void {
     if (!samples.length) return;
     const context = this.ensureContext();
+    if (context.state === 'suspended') {
+      void context.resume().catch(() => undefined);
+    }
     const buffer = context.createBuffer(1, samples.length, this.sampleRate);
     buffer.getChannelData(0).set(samples);
     const source = context.createBufferSource();
@@ -158,6 +168,7 @@ export class RealtimeDialogTurn {
   }
 
   async start(): Promise<void> {
+    this.player.warmUp();
     this.unlisten = await listen<DialogPayload>(`dialog://${this.sessionId}`, (event) => this.onEvent(event.payload));
     if (this.finished) return this.cleanup();
     try {

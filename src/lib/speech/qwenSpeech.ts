@@ -159,6 +159,9 @@ export async function startMicCapture(onPcm: (pcm: Int16Array) => void): Promise
   });
   const Ctx = window.AudioContext || (window as any).webkitAudioContext;
   const context = new Ctx() as AudioContext;
+  if (context.state === 'suspended') {
+    await context.resume().catch(() => undefined);
+  }
   const source = context.createMediaStreamSource(stream);
   const processor = context.createScriptProcessor(4096, 1, 1);
   const inputRate = context.sampleRate;

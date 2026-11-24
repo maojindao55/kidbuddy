@@ -32,7 +32,7 @@ export default function ParentArea() {
       style={{ fontFamily: '"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif' }}
       data-testid="parent-center"
     >
-      <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-5 py-3 shadow-sm">
+      <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-5 pb-3 pt-[max(12px,env(safe-area-inset-top))] shadow-sm">
         <div className="flex items-center gap-3">
           <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-2xl" aria-hidden>🌈</span>
           <div>

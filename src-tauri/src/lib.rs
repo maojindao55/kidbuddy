@@ -81,13 +81,17 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| {
+            #[cfg(desktop)]
             if let tauri::RunEvent::Ready = event {
                 apply_window_icons(&app_handle);
             }
+            #[cfg(not(desktop))]
+            let _ = (&app_handle, &event);
         });
 }
 
 /// macOS 开发模式下 Dock 图标有时不会自动刷新，显式同步窗口图标。
+#[cfg(desktop)]
 fn apply_window_icons(app: &tauri::AppHandle) {
     use tauri::Manager;
 

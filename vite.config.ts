@@ -11,7 +11,7 @@ export default defineConfig(async () => ({
   server: {
     port: 1420,
     strictPort: true,
-    host: host || false,
+    host: host || "0.0.0.0",
     hmr: host
       ? {
           protocol: "ws",
@@ -29,7 +29,7 @@ export default defineConfig(async () => ({
     },
   },
   build: {
-    target: "esnext",
+    target: ["es2020", "chrome100", "safari15"],
     minify: "esbuild",
     outDir: "dist"
   }
