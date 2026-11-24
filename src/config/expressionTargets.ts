@@ -224,8 +224,8 @@ export interface ExpressionTarget {
   difficulty: number;
   /** 听 / 说：听者反应类目标只看动作对不对，不要求开口 */
   modality: ExpressionModality;
-  /** 五领域归类，用于统计 */
-  domain: '语言沟通' | '语言表达';
+  /** 五领域归类，用于统计；认知理解模块也复用这个结构 */
+  domain: '语言沟通' | '语言表达' | '认知理解';
   /** 一句话说清练什么，给孩子和家长看 */
   summary: string;
   /** 2 分标准（skill 原文口径，学期目标） */

@@ -4,7 +4,6 @@ import {
   MODALITY_LABEL,
   SESSION_TASK_COUNT,
   fillSlots,
-  getExpressionTarget,
   materialLine,
   pickSessionTasks,
   recordTaskUsage,
@@ -13,6 +12,7 @@ import {
   type ExpressionTask,
   type MaterialSlot,
 } from '@/config/expressionTargets';
+import { EXPRESSION_MODULE, type LessonModule } from '@/config/lessonModules';
 import {
   DTT_OUTCOME_LABEL,
   DTT_PROMPT_LEVELS,
@@ -28,9 +28,7 @@ import {
 import {
   SCORE_LABEL,
   SCORE_RUBRIC,
-  addSession,
   composeThreeLines,
-  loadBook,
   nextSessionNo,
   pickHighlight,
   sessionFileName,
@@ -48,34 +46,39 @@ import { RecordExportSheet } from './components/RecordExportSheet';
 import { useKid, type KidCompanion } from './KidContext';
 import { useReadAloud } from './hooks/useReadAloud';
 
-const COACH: KidCompanion = {
-  member: {
-    id: 'expression-coach',
-    kind: 'llm',
-    name: '说说老师',
-    description: '语言表达练习教练',
-    source: 'builtin',
-    providerId: '',
-    model: '',
-    customPrompt: '',
-  },
-  meta: {
-    catchphrase: '你讲，我听。',
-    greeting: '我们开始吧。',
-    color: '#F97316',
-    emoji: '💬',
-  },
-};
+/** 练习台的「教练」气泡：名字、颜色、表情跟随模块 */
+function coachFor(module: LessonModule): KidCompanion {
+  return {
+    member: {
+      id: 'expression-coach',
+      kind: 'llm',
+      name: module.coachName,
+      description: `${module.title}练习教练`,
+      source: 'builtin',
+      providerId: '',
+      model: '',
+      customPrompt: '',
+    },
+    meta: {
+      catchphrase: '你讲，我听。',
+      greeting: '我们开始吧。',
+      color: module.accentColor,
+      emoji: module.emoji,
+    },
+  };
+}
 
-const STUDENT_KEY = 'kidbuddy.expression.student';
-const SUBJECT_KEY = 'kidbuddy.expression.by';
-const MATERIAL_KEY = 'kidbuddy.expression.materials';
-const ROTATION_KEY = 'kidbuddy.expression.rotation';
+// 存储键按模块前缀走：语言表达是 kidbuddy.expression.*，认知是 kidbuddy.cognition.*，
+// 这样两个模块各自记自己的教具、轮换和学生名，互不污染。
+const rotationKey = (scope: string) => `${scope}.rotation`;
+const materialKey = (scope: string) => `${scope}.materials`;
+const studentKey = (scope: string) => `${scope}.student`;
+const subjectKey = (scope: string) => `${scope}.by`;
 
 /** 这个孩子在这个目标上最近练过哪几道题，越靠后越新 */
-function readRotation(student: string, targetId: string): string[] {
+function readRotation(scope: string, student: string, targetId: string): string[] {
   try {
-    const raw = localStorage.getItem(ROTATION_KEY);
+    const raw = localStorage.getItem(rotationKey(scope));
     if (!raw) return [];
     const all = JSON.parse(raw) as Record<string, string[]>;
     return all[`${student}::${targetId}`] ?? [];
@@ -84,22 +87,22 @@ function readRotation(student: string, targetId: string): string[] {
   }
 }
 
-function writeRotation(student: string, targetId: string, usedIds: string[]): void {
+function writeRotation(scope: string, student: string, targetId: string, usedIds: string[]): void {
   try {
-    const raw = localStorage.getItem(ROTATION_KEY);
+    const raw = localStorage.getItem(rotationKey(scope));
     const all = raw ? (JSON.parse(raw) as Record<string, string[]>) : {};
     const key = `${student}::${targetId}`;
     all[key] = recordTaskUsage(all[key] ?? [], usedIds);
-    localStorage.setItem(ROTATION_KEY, JSON.stringify(all));
+    localStorage.setItem(rotationKey(scope), JSON.stringify(all));
   } catch {
     // 存不进去最多下次重复抽同一批题，不影响这节课
   }
 }
 
 /** 按目标记住上次选的教具，换个教室不用重新选 */
-function readPicks(targetId: string): Record<string, string> {
+function readPicks(scope: string, targetId: string): Record<string, string> {
   try {
-    const raw = localStorage.getItem(MATERIAL_KEY);
+    const raw = localStorage.getItem(materialKey(scope));
     if (!raw) return {};
     const all = JSON.parse(raw) as Record<string, Record<string, string>>;
     return all[targetId] ?? {};
@@ -108,12 +111,12 @@ function readPicks(targetId: string): Record<string, string> {
   }
 }
 
-function writePicks(targetId: string, picks: Record<string, string>): void {
+function writePicks(scope: string, targetId: string, picks: Record<string, string>): void {
   try {
-    const raw = localStorage.getItem(MATERIAL_KEY);
+    const raw = localStorage.getItem(materialKey(scope));
     const all = raw ? (JSON.parse(raw) as Record<string, Record<string, string>>) : {};
     all[targetId] = picks;
-    localStorage.setItem(MATERIAL_KEY, JSON.stringify(all));
+    localStorage.setItem(materialKey(scope), JSON.stringify(all));
   } catch {
     // 存不进去不影响这节课，下次重新选一遍
   }
@@ -129,17 +132,17 @@ function fillTasks(tasks: ExpressionTask[], materials: MaterialSlot[], picks: Re
   }));
 }
 
-function readStudent(fallback: string): string {
+function readStudent(scope: string, fallback: string): string {
   try {
-    return localStorage.getItem(STUDENT_KEY) || fallback;
+    return localStorage.getItem(studentKey(scope)) || fallback;
   } catch {
     return fallback;
   }
 }
 
-function readSubject(): ExpressionSubject {
+function readSubject(scope: string): ExpressionSubject {
   try {
-    return localStorage.getItem(SUBJECT_KEY) === '家长' ? '家长' : '教师';
+    return localStorage.getItem(subjectKey(scope)) === '家长' ? '家长' : '教师';
   } catch {
     return '教师';
   }
@@ -200,29 +203,53 @@ function outcomeMark(round: ExpressionRound): { text: string; tone: string } {
   return { text: '未判定', tone: 'bg-slate-100 text-slate-400' };
 }
 
+/** 语言表达的练习台入口；认知模块复用同一个页面，只换 module */
 export default function KidExpressionPlay() {
-  const { targetId } = useParams();
-  const target = getExpressionTarget(targetId);
-  const [replayKey, setReplayKey] = useState(0);
-  if (!target) return <Navigate to="/expression" replace />;
-  return <DttSession key={`${target.id}-${replayKey}`} target={target} onExit={() => setReplayKey((k) => k + 1)} />;
+  return <LessonPlayPage module={EXPRESSION_MODULE} />;
 }
 
-function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () => void }) {
+export function LessonPlayPage({ module }: { module: LessonModule }) {
+  const { targetId } = useParams();
+  const target = module.getTarget(targetId);
+  const [replayKey, setReplayKey] = useState(0);
+  if (!target) return <Navigate to={module.basePath} replace />;
+  return (
+    <DttSession
+      key={`${target.id}-${replayKey}`}
+      target={target}
+      module={module}
+      onExit={() => setReplayKey((k) => k + 1)}
+    />
+  );
+}
+
+function DttSession({
+  target,
+  module,
+  onExit,
+}: {
+  target: ExpressionTarget;
+  module: LessonModule;
+  onExit: () => void;
+}) {
   const navigate = useNavigate();
   const { profile, memory, voice, setVoicePrefs } = useKid();
   const readAloud = useReadAloud();
+  const coach = coachFor(module);
   const listRef = useRef<HTMLDivElement>(null);
   const startedRef = useRef(false);
 
-  const student = readStudent(memory.nickname || '小朋友');
-  const by = readSubject();
+  const scope = module.storagePrefix;
+  const student = readStudent(scope, memory.nickname || '小朋友');
+  const by = readSubject(scope);
 
-  const [picks, setPicks] = useState<Record<string, string>>(() => resolvePicks(target.materials, readPicks(target.id)));
+  const [picks, setPicks] = useState<Record<string, string>>(() =>
+    resolvePicks(target.materials, readPicks(scope, target.id)),
+  );
   const [showMaterials, setShowMaterials] = useState(true);
   /** 本节抽到的题（题库有 8 道，一节只练 4 道，按「多久没练过」轮换） */
   const [drawnIds, setDrawnIds] = useState<string[]>(() =>
-    pickSessionTasks(target.tasks, SESSION_TASK_COUNT, readRotation(student, target.id)).map((t) => t.id),
+    pickSessionTasks(target.tasks, SESSION_TASK_COUNT, readRotation(scope, student, target.id)).map((t) => t.id),
   );
   const drawnTasks = useMemo(() => {
     const byId = new Map(target.tasks.map((t) => [t.id, t]));
@@ -263,7 +290,7 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
     (text: string) => {
       setLines((prev) => [...prev, { id: newId('coach'), isKid: false, text }]);
       if (voice.autoReadAloud && readAloud.supported) {
-        readAloud.speakNow(text, COACH.member.id, undefined, 'zh-CN');
+        readAloud.speakNow(text, coach.member.id, undefined, 'zh-CN');
       }
     },
     [readAloud, voice.autoReadAloud],
@@ -337,7 +364,7 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
   const changeMaterial = (slotKey: string, name: string) => {
     const nextPicks = { ...picks, [slotKey]: name };
     setPicks(nextPicks);
-    writePicks(target.id, nextPicks);
+    writePicks(scope, target.id, nextPicks);
     // 只重填本节抽到的那几道，试次下标是按这一批算的
     const nextTasks = fillTasks(drawnTasks, target.materials, nextPicks);
     const nextRounds = trials.map((s, i) => {
@@ -361,7 +388,7 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
   const redraw = () => {
     if (roundsRef.current.some((r) => r.achievement !== null || r.skipped)) return;
     const nextDrawn = pickSessionTasks(target.tasks, SESSION_TASK_COUNT, [
-      ...readRotation(student, target.id),
+      ...readRotation(scope, student, target.id),
       ...drawnIds,
     ]);
     const nextTasks = fillTasks(nextDrawn, target.materials, picks);
@@ -472,7 +499,7 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
   };
 
   const save = () => {
-    const book = loadBook();
+    const book = module.loadBook();
     const session: ExpressionSession = {
       id: newId('session'),
       student,
@@ -489,8 +516,8 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
       materials: picks,
       createdAt: Date.now(),
     };
-    addSession(book, session);
-    writeRotation(student, target.id, drawnIds);
+    module.addSession(book, session);
+    writeRotation(scope, student, target.id, drawnIds);
     setSaved(session);
     setPhase('saved');
   };
@@ -501,7 +528,7 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
     return (
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-8" data-testid="expression-review">
         <div className="mx-auto w-full max-w-4xl space-y-4 py-3">
-          <div className="rounded-[28px] bg-gradient-to-r from-rose-400 to-orange-400 p-5 text-white shadow-lg">
+          <div className={`rounded-[28px] bg-gradient-to-r ${module.headerGradient} p-5 text-white shadow-lg`}>
             <h1 className="text-2xl font-extrabold">填写这节课的记录</h1>
             <p className="mt-1 text-sm opacity-95">
               {target.id} {target.name} · DTT 已判定 {stats.total}/{rounds.filter((r) => !r.skipped).length} 试次
@@ -567,7 +594,7 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
                                 ? 'border-emerald-500 bg-emerald-500 text-white'
                                 : a === 'prompted'
                                   ? 'border-amber-400 bg-amber-400 text-white'
-                                  : 'border-rose-500 bg-rose-500 text-white'
+                                  : `${module.accent.ring} ${module.accent.solid} text-white`
                               : 'border-slate-200 bg-white text-slate-500'
                           }`}
                         >
@@ -600,7 +627,7 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
                   data-testid={`score-${s}`}
                   onClick={() => setScore(s)}
                   className={`flex h-14 min-w-[9rem] flex-1 flex-col items-center justify-center rounded-2xl border-2 text-sm font-bold ${
-                    score === s ? 'border-rose-400 bg-rose-50 text-rose-700' : 'border-slate-200 bg-white text-slate-500'
+                    score === s ? `${module.accent.ring} ${module.accent.soft} ${module.accent.textStrong}` : 'border-slate-200 bg-white text-slate-500'
                   }`}
                 >
                   <span className="text-lg">{s} 分</span>
@@ -638,7 +665,7 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
                     setThree((p) => ({ ...p, did: e.target.value }));
                   }}
                   rows={3}
-                  className="mt-1 w-full rounded-xl border-2 border-slate-200 p-2.5 text-sm outline-none focus:border-rose-400"
+                  className={`mt-1 w-full rounded-xl border-2 border-slate-200 p-2.5 text-sm outline-none ${module.accent.focusRing}`}
                 />
               </label>
               <label className="block">
@@ -650,7 +677,7 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
                     setThree((p) => ({ ...p, achieved: e.target.value }));
                   }}
                   rows={3}
-                  className="mt-1 w-full rounded-xl border-2 border-slate-200 p-2.5 text-sm outline-none focus:border-rose-400"
+                  className={`mt-1 w-full rounded-xl border-2 border-slate-200 p-2.5 text-sm outline-none ${module.accent.focusRing}`}
                 />
               </label>
               <label className="block">
@@ -662,7 +689,7 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
                     setThree((p) => ({ ...p, stuck: e.target.value }));
                   }}
                   rows={3}
-                  className="mt-1 w-full rounded-xl border-2 border-slate-200 p-2.5 text-sm outline-none focus:border-rose-400"
+                  className={`mt-1 w-full rounded-xl border-2 border-slate-200 p-2.5 text-sm outline-none ${module.accent.focusRing}`}
                 />
               </label>
             </div>
@@ -681,7 +708,7 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
                 onChange={(e) => setHighlight(e.target.value)}
                 rows={2}
                 placeholder="取孩子自己说的一句话，不要写「表现不错」"
-                className="mt-1 w-full rounded-xl border-2 border-slate-200 p-2.5 text-sm outline-none focus:border-rose-400"
+                className={`mt-1 w-full rounded-xl border-2 border-slate-200 p-2.5 text-sm outline-none ${module.accent.focusRing}`}
               />
             </label>
             <label className="mt-3 block">
@@ -691,7 +718,7 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
                 onChange={(e) => setNextStep(e.target.value)}
                 rows={2}
                 placeholder="一句话说清下周练什么、怎么练"
-                className="mt-1 w-full rounded-xl border-2 border-slate-200 p-2.5 text-sm outline-none focus:border-rose-400"
+                className={`mt-1 w-full rounded-xl border-2 border-slate-200 p-2.5 text-sm outline-none ${module.accent.focusRing}`}
               />
             </label>
           </div>
@@ -700,7 +727,7 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
             <button type="button" onClick={() => setPhase('run')} className="h-14 flex-1 rounded-2xl bg-white text-base font-bold text-slate-600 shadow-sm">
               回去再练几个试次
             </button>
-            <button type="button" onClick={save} data-testid="save-session" className="h-14 flex-[2] rounded-2xl bg-rose-500 text-base font-extrabold text-white shadow-sm">
+            <button type="button" onClick={save} data-testid="save-session" className={`h-14 flex-[2] rounded-2xl ${module.accent.solid} text-base font-extrabold text-white shadow-sm`}>
               保存这份记录
             </button>
           </div>
@@ -725,8 +752,8 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
             <button type="button" onClick={() => setShowExport(true)} className="flex h-14 items-center justify-center rounded-2xl bg-slate-800 text-base font-bold text-white">
               导出成课堂记录 .md
             </button>
-            <button type="button" onClick={() => navigate('/expression')} className="flex h-14 items-center justify-center rounded-2xl bg-rose-500 text-base font-bold text-white">
-              回说说小课堂
+            <button type="button" onClick={() => navigate(module.basePath)} className={`flex h-14 items-center justify-center rounded-2xl ${module.accent.solid} text-base font-bold text-white`}>
+              回{module.title}
             </button>
             <button type="button" onClick={onExit} className="flex h-12 items-center justify-center rounded-2xl bg-slate-100 text-sm font-bold text-slate-500">
               再练一次
@@ -744,10 +771,10 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="expression-play" data-target={target.id} data-trial={idx + 1}>
       <div className="flex shrink-0 items-center gap-3 px-4 pb-2">
-        <Link to="/expression" aria-label="返回说说小课堂" className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-2xl shadow-sm">
+        <Link to={module.basePath} aria-label={`返回${module.title}`} className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-2xl shadow-sm">
           ←
         </Link>
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-rose-100 text-3xl" aria-hidden>💬</div>
+        <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${module.accent.icon} text-3xl`} aria-hidden>{module.emoji}</div>
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-xl font-extrabold text-slate-800">
             {target.id} {target.name}
@@ -831,9 +858,9 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
             </div>
           )}
 
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-rose-50 px-3 py-2">
-            <span className="text-xs font-bold text-rose-600">每道题练几遍</span>
-            <div className="flex overflow-hidden rounded-xl border-2 border-rose-200">
+          <div className={`flex flex-wrap items-center justify-between gap-2 rounded-2xl ${module.accent.soft} px-3 py-2`}>
+            <span className={`text-xs font-bold ${module.accent.text}`}>每道题练几遍</span>
+            <div className={`flex overflow-hidden rounded-xl border-2 ${module.accent.softBorder}`}>
               {[1, 2, 3].map((n) => (
                 <button
                   key={n}
@@ -841,7 +868,7 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
                   onClick={() => changeRepeats(n)}
                   data-testid={`repeats-${n}`}
                   className={`h-12 px-4 text-sm font-bold ${
-                    repeats === n ? 'bg-rose-500 text-white' : 'bg-white text-slate-500'
+                    repeats === n ? `${module.accent.solid} text-white` : 'bg-white text-slate-500'
                   }`}
                 >
                   {n} 遍
@@ -864,7 +891,7 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
             </button>
           </div>
 
-          <div className="rounded-2xl border-2 border-rose-200 bg-white p-4">
+          <div className={`rounded-2xl border-2 ${module.accent.softBorder} bg-white p-4`}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-xs font-bold text-slate-400">
                 第 {Math.min(idx + 1, trials.length)} 试次 · 第 {spec.repeatIndex} 遍
@@ -894,7 +921,7 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
               {readAloud.supported && (
                 <button
                   type="button"
-                  onClick={() => readAloud.speakNow(currentTask.ask, COACH.member.id, undefined, 'zh-CN')}
+                  onClick={() => readAloud.speakNow(currentTask.ask, coach.member.id, undefined, 'zh-CN')}
                   className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-xl bg-sky-500 px-3 text-sm font-bold text-white"
                 >
                   🔊 再说一遍指令
@@ -964,7 +991,7 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
                   type="button"
                   onClick={() => judge('incorrect', 'independent')}
                   data-testid="judge-failed"
-                  className="flex h-14 flex-1 items-center justify-center rounded-xl bg-rose-500 px-3 text-sm font-bold text-white"
+                  className={`flex h-14 flex-1 items-center justify-center rounded-xl ${module.accent.solid} px-3 text-sm font-bold text-white`}
                 >
                   ❌ 错误
                 </button>
@@ -1043,11 +1070,11 @@ function DttSession({ target, onExit }: { target: ExpressionTarget; onExit: () =
               <ChatBubble
                 key={m.id}
                 isKid={m.isKid}
-                speakerName={m.isKid ? student : COACH.member.name}
+                speakerName={m.isKid ? student : coach.member.name}
                 content={m.text}
-                companion={m.isKid ? undefined : COACH}
+                companion={m.isKid ? undefined : coach}
                 fontSize={fontSize}
-                onReadAloud={!m.isKid && readAloud.supported ? () => readAloud.speakNow(m.text, COACH.member.id, undefined, 'zh-CN') : undefined}
+                onReadAloud={!m.isKid && readAloud.supported ? () => readAloud.speakNow(m.text, coach.member.id, undefined, 'zh-CN') : undefined}
               />
             ))}
           </div>

@@ -6,6 +6,8 @@ import KidChat from './pages/kid/KidChat';
 import KidDraw from './pages/kid/KidDraw';
 import KidExpression from './pages/kid/KidExpression';
 import KidExpressionPlay from './pages/kid/KidExpressionPlay';
+import KidCognition from './pages/kid/KidCognition';
+import KidCognitionPlay from './pages/kid/KidCognitionPlay';
 import KidStorybooks from './pages/kid/KidStorybooks';
 import KidStorybookCreate from './pages/kid/KidStorybookCreate';
 import KidStorybookRead from './pages/kid/KidStorybookRead';
@@ -25,6 +27,8 @@ export const router = createBrowserRouter([
       { path: 'draw', element: <KidDraw /> },
       { path: 'expression', element: <LessonGuard><KidExpression /></LessonGuard> },
       { path: 'expression/:targetId', element: <LessonGuard><KidExpressionPlay /></LessonGuard> },
+      { path: 'cognition', element: <LessonGuard><KidCognition /></LessonGuard> },
+      { path: 'cognition/:targetId', element: <LessonGuard><KidCognitionPlay /></LessonGuard> },
       { path: 'books', element: <KidStorybooks /> },
       { path: 'books/new', element: <KidStorybookCreate /> },
       { path: 'books/:bookId', element: <KidStorybookRead /> },

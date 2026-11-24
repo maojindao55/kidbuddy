@@ -2,22 +2,101 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { unlockParentArea } from '@/config/parentGate';
 import { isLessonAreaUnlocked, lessonUnlockLeftMinutes, unlockLessonArea } from '@/config/lessonGate';
+import { type LessonModule } from '@/config/lessonModules';
+import { EXPRESSION_MODULE, COGNITION_MODULE } from '@/config/lessonModules';
 import { useKid } from './KidContext';
 import { CompanionAvatar } from './components/ChatBubble';
 import { LongPressRing, ParentGateDialog, useLongPress } from './components/ParentGate';
 import { PLAYGROUND_CHAT_ID } from './kidRoutes';
 
+/**
+ * 训练模块卡片：孩子不能自己进。
+ * 没验证过要长按 1.5 秒才弹验证，验证过之后单击直接进。
+ */
+function GatedLessonCard({
+  module,
+  gradient,
+  testId,
+}: {
+  module: LessonModule;
+  gradient: string;
+  testId: string;
+}) {
+  const navigate = useNavigate();
+  const unlocked = isLessonAreaUnlocked();
+  const left = lessonUnlockLeftMinutes();
+  const [open, setOpen] = useState(false);
+  const press = useLongPress(() => {
+    if (!isLessonAreaUnlocked()) setOpen(true);
+  });
+
+  const openGate = () => {
+    if (isLessonAreaUnlocked()) navigate(module.basePath);
+    else setOpen(true);
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        data-testid={testId}
+        aria-label={`${module.title}（长按 1.5 秒，需家长或老师验证）`}
+        title="长按 1.5 秒进入 · 需家长或老师验证"
+        onContextMenu={(e) => e.preventDefault()}
+        style={{ touchAction: 'none', WebkitTouchCallout: 'none' }}
+        onPointerDown={press.start}
+        onPointerUp={press.cancel}
+        onPointerLeave={press.cancel}
+        onPointerCancel={press.cancel}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            openGate();
+          }
+        }}
+        onClick={openGate}
+        className={`relative flex min-h-14 select-none items-center gap-3 overflow-hidden rounded-[32px] bg-gradient-to-r ${gradient} p-5 text-left text-white shadow-lg transition active:scale-[0.99]`}
+      >
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-3xl" aria-hidden>
+          {module.emoji}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 text-xl font-extrabold">
+            {module.title}
+            <span className="text-base" aria-hidden>{unlocked ? '🔓' : '🔒'}</span>
+          </div>
+          <div className="text-sm opacity-95">
+            {press.pressing
+              ? '别松手，马上到验证…'
+              : unlocked
+                ? `老师模式 · 还剩 ${left} 分钟`
+                : '老师带练 · 长按 1.5 秒进入'}
+          </div>
+        </div>
+        <span className="text-2xl font-extrabold" aria-hidden>→</span>
+        <LongPressRing pressing={press.pressing} className="rounded-[32px]" />
+      </button>
+
+      {open && (
+        <ParentGateDialog
+          title="课堂入口验证"
+          description={`${module.title}是老师带孩子练的训练台，请家长或老师验证后进入。验证后 30 分钟内不用再验证。`}
+          onClose={() => setOpen(false)}
+          onSuccess={() => {
+            unlockLessonArea();
+            setOpen(false);
+            navigate(module.basePath);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
 export default function KidHome() {
   const navigate = useNavigate();
   const { companions, companionsLoading, memory, aiConfigured, aiConfigChecked } = useKid();
   const [gateOpen, setGateOpen] = useState(false);
-  const [lessonGateOpen, setLessonGateOpen] = useState(false);
-  const lessonUnlocked = isLessonAreaUnlocked();
-  const lessonLeft = lessonUnlockLeftMinutes();
-  // 已经解锁时单击直接进；没解锁时长按 1.5 秒才弹验证
-  const lessonPress = useLongPress(() => {
-    if (!isLessonAreaUnlocked()) setLessonGateOpen(true);
-  });
   const name = memory.nickname || '小朋友';
 
   return (
@@ -52,7 +131,7 @@ export default function KidHome() {
       )}
 
       {/* 主力创意与成长入口：绘本魔法屋、魔法画室 & 说说小课堂 */}
-      <div className="mx-auto mb-5 grid max-w-5xl grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="mx-auto mb-5 grid max-w-5xl grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-4">
         <Link
           to="/books"
           data-testid="books-card"
@@ -83,48 +162,8 @@ export default function KidHome() {
           <span className="text-2xl font-extrabold" aria-hidden>→</span>
         </Link>
 
-        <button
-          type="button"
-          data-testid="expression-card"
-          aria-label="说说小课堂（长按 1.5 秒，需家长或老师验证）"
-          title="长按 1.5 秒进入 · 需家长或老师验证"
-          onContextMenu={(e) => e.preventDefault()}
-          style={{ touchAction: 'none', WebkitTouchCallout: 'none' }}
-          onPointerDown={lessonPress.start}
-          onPointerUp={lessonPress.cancel}
-          onPointerLeave={lessonPress.cancel}
-          onPointerCancel={lessonPress.cancel}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              if (isLessonAreaUnlocked()) navigate('/expression');
-              else setLessonGateOpen(true);
-            }
-          }}
-          onClick={() => {
-            if (isLessonAreaUnlocked()) navigate('/expression');
-          }}
-          className="relative flex min-h-14 select-none items-center gap-3 overflow-hidden rounded-[32px] bg-gradient-to-r from-rose-400 to-orange-400 p-5 text-left text-white shadow-lg transition active:scale-[0.99]"
-        >
-          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-3xl" aria-hidden>
-            💬
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 text-xl font-extrabold">
-              说说小课堂
-              <span className="text-base" aria-hidden>{lessonUnlocked ? '🔓' : '🔒'}</span>
-            </div>
-            <div className="text-sm opacity-95">
-              {lessonPress.pressing
-                ? '别松手，马上到验证…'
-                : lessonUnlocked
-                  ? `老师模式 · 还剩 ${lessonLeft} 分钟`
-                  : '老师带练 · 长按 1.5 秒进入'}
-            </div>
-          </div>
-          <span className="text-2xl font-extrabold" aria-hidden>→</span>
-          <LongPressRing pressing={lessonPress.pressing} className="rounded-[32px]" />
-        </button>
+        <GatedLessonCard module={EXPRESSION_MODULE} gradient="from-rose-400 to-orange-400" testId="expression-card" />
+        <GatedLessonCard module={COGNITION_MODULE} gradient="from-indigo-400 to-violet-500" testId="cognition-card" />
       </div>
 
       <Link
@@ -196,18 +235,6 @@ export default function KidHome() {
         />
       )}
 
-      {lessonGateOpen && (
-        <ParentGateDialog
-          title="课堂入口验证"
-          description="说说小课堂是老师带孩子练的训练台，请家长或老师验证后进入。验证后 30 分钟内不用再验证。"
-          onClose={() => setLessonGateOpen(false)}
-          onSuccess={() => {
-            unlockLessonArea();
-            setLessonGateOpen(false);
-            navigate('/expression');
-          }}
-        />
-      )}
     </div>
   );
 }

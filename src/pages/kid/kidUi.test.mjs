@@ -37,15 +37,28 @@ assert.doesNotMatch(kidHome, /english/i, '首页不再有英语岛入口');
 
 // 说说小课堂：孩子不能自己进，卡片要长按 1.5 秒 + 家长/老师验证
 assert.doesNotMatch(kidHome, /to="\/expression"/, '卡片不能是可点的 Link');
-assert.match(kidHome, /data-testid="expression-card"/);
+assert.match(kidHome, /testId="expression-card"/);
 assert.match(kidHome, /useLongPress\(/, '卡片走长按，不是单击');
 assert.match(kidHome, /title="课堂入口验证"/, '要点明这是课堂入口验证');
 assert.match(kidHome, /unlockLessonArea\(\)/, '验证通过才解锁课堂');
 assert.match(routes, /<LessonGuard><KidExpression \/><\/LessonGuard>/, '目标列表要守卫');
 assert.match(routes, /<LessonGuard><KidExpressionPlay \/><\/LessonGuard>/, '练习台要守卫');
+assert.match(routes, /<LessonGuard><KidCognition \/><\/LessonGuard>/, '认知列表也要守卫');
+assert.match(routes, /<LessonGuard><KidCognitionPlay \/><\/LessonGuard>/, '认知练习台也要守卫');
+assert.match(kidHome, /testId="cognition-card"/, '首页要有认知理解卡片');
+// 两个模块共用同一套页面与门禁，只换配置
+const modules = await read('../../config/lessonModules.ts');
+assert.match(modules, /export const EXPRESSION_MODULE/);
+assert.match(modules, /export const COGNITION_MODULE/);
+assert.match(modules, /kidbuddy\.expression\.book\.v1/);
+assert.match(modules, /kidbuddy\.cognition\.book\.v1/, '认知要有自己的账本 key，不能和表达混');
 const expressionPage = await read('./KidExpression.tsx');
 assert.match(expressionPage, /data-testid="lock-lesson"/, '页面里要能手动结束课堂');
 assert.match(expressionPage, /lockLessonArea\(\)/, '结束课堂要真的上锁');
+const cognitionPage = await read('./KidCognition.tsx');
+assert.match(cognitionPage, /LessonTargetsPage/, '认知列表复用同一个列表页');
+const cognitionPlay = await read('./KidCognitionPlay.tsx');
+assert.match(cognitionPlay, /LessonPlayPage/, '认知练习复用同一个练习台');
 
 // 旧版成人角色群聊目录已彻底移除
 await assert.rejects(access(new URL('../chat/', import.meta.url)), { code: 'ENOENT' }, 'src/pages/chat must be deleted');
@@ -123,7 +136,7 @@ assert.match(exprHome, /expression-step-/, '目标卡要显示台阶编号');
 assert.match(exprHome, /\{target\.difficulty\}/, '台阶编号必须直接用 difficulty');
 assert.doesNotMatch(exprHome, /step=\{i \+ 1\}/, '不允许按列表下标重新编号');
 assert.match(exprHome, /stage-filter-/, '要有学段筛选');
-assert.match(exprHome, /kidbuddy\.expression\.stage/, '学段选择要记住');
+assert.match(exprHome, /\$\{scope\}\.stage/, '学段选择要记住（键挂在模块前缀下）');
 assert.match(exprHome, /expression-modality-/, '卡片要显示听/说标记');
 assert.match(exprHome, /MODALITY_LABEL/, '听/说标记要用统一文案');
 // 台阶上限写成常量：曾经写死「/ 10」，补到 11 条后文案就错了。
@@ -134,7 +147,7 @@ assert.match(exprPlay, /modality === 'receptive'/, '听者反应类目标要有�
 // 教具不能写死在题干里：一律走 fillSlots 替换，且选择要记住
 assert.match(exprPlay, /fillSlots/, '题干必须经过教具槽位替换');
 assert.match(exprPlay, /material-picker/, '练习页要能选今天的教具');
-assert.match(exprPlay, /kidbuddy\.expression\.materials/, '教具选择要记住，换课不用重选');
+assert.match(exprPlay, /\$\{scope\}\.materials/, '教具选择要记住，换课不用重选');
 assert.match(exprPlay, /materials: picks/, '记录里要存下实际用的教具');
 // 题量控制：跳过不计分，且改遍数不能把已判定的试次清掉
 assert.match(exprPlay, /skipCurrent/, '要有单题跳过');
@@ -157,7 +170,7 @@ assert.doesNotMatch(exprPlay, /\{!feedbackCorrect && \(\s*<button/, '答对也�
 assert.match(exprPlay, /pickSessionTasks/, '练习页要按轮换抽题');
 assert.match(exprPlay, /task-pool/, '要显示本节抽到几道 / 题库共几道');
 assert.match(exprPlay, /redraw-tasks/, '要有「换一批」');
-assert.match(exprPlay, /kidbuddy\.expression\.rotation/, '轮换记录要存本地，不然每次都是同一批');
+assert.match(exprPlay, /\$\{scope\}\.rotation/, '轮换记录要存本地，不然每次都是同一批');
 assert.doesNotMatch(exprPlay, /fillTasks\(target\.tasks/, '换教具时只能重填本节抽到的题，不能重填整个题库');
 
 console.log('kidUi.test.mjs: ok');

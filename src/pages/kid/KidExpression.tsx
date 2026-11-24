@@ -2,12 +2,8 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { lockLessonArea } from '@/config/lessonGate';
 import {
-  EXPRESSION_STAGES,
-  EXPRESSION_TARGETS_BY_STAGE,
   MODALITY_LABEL,
   isStageBand,
-  stageGroups,
-  suggestNextTarget,
   tierOf,
   type ExpressionBand,
   type ExpressionTier,
@@ -17,7 +13,6 @@ import {
   SCORE_LABEL,
   STABILITY_LABEL,
   historyLine,
-  loadBook,
   nextSessionNo,
   sessionsOf,
   targetStat,
@@ -26,33 +21,35 @@ import {
   type ExpressionSubject,
   type StabilityStatus,
 } from '@/config/kidExpression';
+import { EXPRESSION_MODULE, type LessonModule } from '@/config/lessonModules';
 import { RecordExportSheet } from './components/RecordExportSheet';
 import { useKid } from './KidContext';
 
-const STUDENT_KEY = 'kidbuddy.expression.student';
-const SUBJECT_KEY = 'kidbuddy.expression.by';
-const STAGE_KEY = 'kidbuddy.expression.stage';
+// 键挂在模块前缀下：语言表达是 kidbuddy.expression.*，认知是 kidbuddy.cognition.*
+const studentKey = (scope: string) => `${scope}.student`;
+const subjectKey = (scope: string) => `${scope}.by`;
+const stageKey = (scope: string) => `${scope}.stage`;
 
-function readStudent(fallback: string): string {
+function readStudent(scope: string, fallback: string): string {
   try {
-    return localStorage.getItem(STUDENT_KEY) || fallback;
+    return localStorage.getItem(studentKey(scope)) || fallback;
   } catch {
     return fallback;
   }
 }
 
-function readStage(): ExpressionBand | 'all' {
+function readStage(scope: string): ExpressionBand | 'all' {
   try {
-    const raw = localStorage.getItem(STAGE_KEY);
+    const raw = localStorage.getItem(stageKey(scope));
     return isStageBand(raw) ? raw : 'all';
   } catch {
     return 'all';
   }
 }
 
-function readSubject(): ExpressionSubject {
+function readSubject(scope: string): ExpressionSubject {
   try {
-    return localStorage.getItem(SUBJECT_KEY) === '家长' ? '家长' : '教师';
+    return localStorage.getItem(subjectKey(scope)) === '家长' ? '家长' : '教师';
   } catch {
     return '教师';
   }
@@ -82,20 +79,26 @@ function TargetCard({
   recommended,
   book,
   student,
+  basePath,
+  total,
+  accent,
 }: {
   target: ExpressionTarget;
   recommended: boolean;
   book: ExpressionBook;
   student: string;
+  basePath: string;
+  total: number;
+  accent: LessonModule['accent'];
 }) {
   const stat = targetStat(book, student, target.id);
   const tier = tierOf(target.difficulty);
   return (
     <Link
-      to={`/expression/${target.id}`}
+      to={`${basePath}/${target.id}`}
       data-testid={`expression-target-${target.id}`}
       className={`flex flex-col gap-2.5 rounded-[28px] border-4 bg-white p-4 shadow-md transition active:scale-[0.98] ${
-        recommended ? 'border-rose-300 ring-4 ring-rose-100' : 'border-rose-100'
+        recommended ? `${accent.ring} ring-4 ${accent.soft}` : accent.softBorder
       }`}
     >
       <div className="flex items-start justify-between gap-2">
@@ -103,12 +106,12 @@ function TargetCard({
           <div className="flex flex-wrap items-center gap-1.5">
             <span
               data-testid={`expression-step-${target.id}`}
-              title={`全表第 ${target.difficulty} 级（共 ${EXPRESSION_TARGETS_BY_STAGE.length} 个目标），数字越小越容易`}
-              className="flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full bg-rose-500 px-1.5 text-xs font-extrabold text-white"
+              title={`全表第 ${target.difficulty} 级（共 ${total} 个目标），数字越小越容易`}
+              className={`flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full ${accent.solid} px-1.5 text-xs font-extrabold text-white`}
             >
               {target.difficulty}
             </span>
-            <span className="rounded-lg bg-rose-100 px-2 py-0.5 text-xs font-extrabold text-rose-700">{target.id}</span>
+            <span className={`rounded-lg ${accent.icon} px-2 py-0.5 text-xs font-extrabold ${accent.textStrong}`}>{target.id}</span>
             <span className="text-lg font-extrabold text-slate-800">{target.name}</span>
             <span
               data-testid={`expression-modality-${target.id}`}
@@ -143,7 +146,7 @@ function TargetCard({
         <span className="line-clamp-2 min-w-0 flex-1 text-xs leading-snug text-slate-400">2 分标准：{target.standard2}</span>
         <span
           className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${
-            recommended ? 'bg-rose-500 text-white' : 'bg-rose-50 text-rose-600'
+            recommended ? `${accent.solid} text-white` : `${accent.soft} ${accent.text}`
           }`}
         >
           {recommended ? '建议从这里练 →' : '开始 →'}
@@ -153,30 +156,36 @@ function TargetCard({
   );
 }
 
+/** 语言表达的目标列表；认知模块复用同一个页面，只换 module */
 export default function KidExpression() {
+  return <LessonTargetsPage module={EXPRESSION_MODULE} />;
+}
+
+export function LessonTargetsPage({ module }: { module: LessonModule }) {
   const navigate = useNavigate();
   const { memory } = useKid();
-  const [book] = useState<ExpressionBook>(loadBook);
-  const [student, setStudent] = useState(() => readStudent(memory.nickname || '小朋友'));
-  const [subject, setSubject] = useState<ExpressionSubject>(readSubject);
+  const scope = module.storagePrefix;
+  const [book] = useState<ExpressionBook>(module.loadBook);
+  const [student, setStudent] = useState(() => readStudent(scope, memory.nickname || '小朋友'));
+  const [subject, setSubject] = useState<ExpressionSubject>(() => readSubject(scope));
   const [exporting, setExporting] = useState<ExpressionSession | null>(null);
-  const [stage, setStage] = useState<ExpressionBand | 'all'>(readStage);
+  const [stage, setStage] = useState<ExpressionBand | 'all'>(() => readStage(scope));
 
   const mine = sessionsOf(book, student);
-  const stableIds = EXPRESSION_TARGETS_BY_STAGE.filter(
+  const stableIds = module.targets.filter(
     (t) => targetStat(book, student, t.id).status === 'stable',
   ).map((t) => t.id);
   const stableCount = stableIds.length;
-  const pendingCount = EXPRESSION_TARGETS_BY_STAGE.filter(
+  const pendingCount = module.targets.filter(
     (t) => targetStat(book, student, t.id).status === 'pending',
   ).length;
-  const nextTarget = suggestNextTarget(stableIds);
-  const groups = stageGroups(stage);
+  const nextTarget = module.suggestNext(stableIds);
+  const groups = module.stageGroups(stage);
 
   const changeStage = (value: ExpressionBand | 'all') => {
     setStage(value);
     try {
-      localStorage.setItem(STAGE_KEY, value);
+      localStorage.setItem(stageKey(scope), value);
     } catch {
       /* 忽略 */
     }
@@ -185,7 +194,7 @@ export default function KidExpression() {
   const changeStudent = (value: string) => {
     setStudent(value);
     try {
-      localStorage.setItem(STUDENT_KEY, value);
+      localStorage.setItem(studentKey(scope), value);
     } catch {
       /* 忽略 */
     }
@@ -194,7 +203,7 @@ export default function KidExpression() {
   const changeSubject = (value: ExpressionSubject) => {
     setSubject(value);
     try {
-      localStorage.setItem(SUBJECT_KEY, value);
+      localStorage.setItem(subjectKey(scope), value);
     } catch {
       /* 忽略 */
     }
@@ -203,12 +212,12 @@ export default function KidExpression() {
   return (
     <div className="flex-1 overflow-y-auto px-5 pb-8 pt-2" data-testid="kid-expression-page">
       <div className="mx-auto max-w-5xl space-y-5">
-        <div className="flex flex-wrap items-center justify-between gap-4 rounded-[32px] bg-gradient-to-r from-rose-400 to-orange-400 p-6 text-white shadow-lg">
+        <div className={`flex flex-wrap items-center justify-between gap-4 rounded-[32px] bg-gradient-to-r ${module.headerGradient} p-6 text-white shadow-lg`}>
           <div className="flex items-center gap-4">
-            <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-4xl" aria-hidden>💬</span>
+            <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-4xl" aria-hidden>{module.emoji}</span>
             <div>
-              <h1 className="text-3xl font-extrabold">说说小课堂</h1>
-              <p className="mt-1 text-base opacity-95">练表达与听指令：开口要东西、听两步指令、说清一件事——每次练完留一份可统计的记录。</p>
+              <h1 className="text-3xl font-extrabold">{module.title}</h1>
+              <p className="mt-1 text-base opacity-95">{module.tagline}</p>
             </div>
           </div>
           <div className="flex gap-3">
@@ -243,7 +252,7 @@ export default function KidExpression() {
               value={student}
               onChange={(e) => changeStudent(e.target.value)}
               data-testid="expression-student"
-              className="h-12 w-36 rounded-xl border-2 border-slate-200 px-3 text-base font-bold text-slate-800 outline-none focus:border-rose-400"
+              className={`h-12 w-36 rounded-xl border-2 border-slate-200 px-3 text-base font-bold text-slate-800 outline-none ${module.accent.focusRing}`}
             />
           </label>
           <div className="flex items-center gap-2 text-sm font-bold text-slate-600">
@@ -255,7 +264,7 @@ export default function KidExpression() {
                   type="button"
                   data-testid={`expression-subject-${v}`}
                   onClick={() => changeSubject(v)}
-                  className={`h-12 px-4 text-sm font-bold ${subject === v ? 'bg-rose-500 text-white' : 'bg-white text-slate-500'}`}
+                  className={`h-12 px-4 text-sm font-bold ${subject === v ? `${module.accent.solid} text-white` : 'bg-white text-slate-500'}`}
                 >
                   {v === '教师' ? '老师带' : '家长带'}
                 </button>
@@ -285,7 +294,7 @@ export default function KidExpression() {
           <div className="mb-4 flex flex-wrap gap-2" data-testid="expression-stage-filter">
             {([
               { key: 'all' as const, label: '全部学段' },
-              ...EXPRESSION_STAGES.map((s) => ({ key: s.band, label: `${s.ageLabel} ${s.code}` })),
+              ...module.stages.map((s) => ({ key: s.band, label: `${s.ageLabel} ${s.code}` })),
             ]).map((option) => {
               const active = stage === option.key;
               return (
@@ -296,7 +305,7 @@ export default function KidExpression() {
                   aria-pressed={active}
                   onClick={() => changeStage(option.key)}
                   className={`h-12 rounded-full px-4 text-sm font-bold transition ${
-                    active ? 'bg-rose-500 text-white shadow-sm' : 'bg-white text-slate-500 shadow-sm'
+                    active ? `${module.accent.solid} text-white shadow-sm` : 'bg-white text-slate-500 shadow-sm'
                   }`}
                 >
                   {option.label}
@@ -324,6 +333,9 @@ export default function KidExpression() {
                       recommended={nextTarget?.id === t.id}
                       book={book}
                       student={student}
+                      basePath={module.basePath}
+                      total={module.targets.length}
+                      accent={module.accent}
                     />
                   ))}
                 </div>
@@ -348,7 +360,7 @@ export default function KidExpression() {
                   <div key={s.id} className="flex flex-wrap items-center gap-3 rounded-2xl border-2 border-slate-100 p-3">
                     <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">第{s.sessionNo}课时</span>
                     <span className="text-sm font-bold text-slate-700">{s.date} · {s.topic}</span>
-                    <span className="rounded-full bg-rose-50 px-2 py-0.5 text-xs font-bold text-rose-600">{s.targetId}</span>
+                    <span className={`rounded-full ${module.accent.soft} px-2 py-0.5 text-xs font-bold ${module.accent.text}`}>{s.targetId}</span>
                     <span className="rounded-full bg-slate-50 px-2 py-0.5 text-xs font-bold text-slate-500">{s.by}</span>
                     <ScoreChip score={s.score} />
                     <button

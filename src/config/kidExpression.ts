@@ -64,8 +64,6 @@ export interface ExpressionBook {
   sessions: ExpressionSession[];
 }
 
-const BOOK_KEY = 'kidbuddy.expression.book.v1';
-
 export const ACHIEVEMENT_LABEL: Record<Achievement, string> = {
   independent: '独立做到',
   prompted: '提示后做到',
@@ -133,27 +131,45 @@ export function normalizeBook(raw: unknown): ExpressionBook {
   return out;
 }
 
-export function loadBook(): ExpressionBook {
+export const BOOK_KEY = 'kidbuddy.expression.book.v1';
+
+/**
+ * 账本按 key 读写：语言表达和认知理解各存一本，互不干扰。
+ * 统计、三行记录、导出这些是纯函数，两个模块直接共用。
+ */
+export function loadBookFrom(key: string): ExpressionBook {
   try {
-    const raw = localStorage.getItem(BOOK_KEY);
+    const raw = localStorage.getItem(key);
     return raw ? normalizeBook(JSON.parse(raw)) : emptyBook();
   } catch {
     return emptyBook();
   }
 }
 
-export function saveBook(book: ExpressionBook): void {
+export function saveBookTo(key: string, book: ExpressionBook): void {
   try {
-    localStorage.setItem(BOOK_KEY, JSON.stringify(normalizeBook(book)));
+    localStorage.setItem(key, JSON.stringify(normalizeBook(book)));
   } catch {
     /* 存储满了就不落盘，界面仍可用 */
   }
 }
 
-export function addSession(book: ExpressionBook, session: ExpressionSession): ExpressionBook {
+export function addSessionTo(key: string, book: ExpressionBook, session: ExpressionSession): ExpressionBook {
   const next = normalizeBook({ sessions: [...book.sessions, session] });
-  saveBook(next);
+  saveBookTo(key, next);
   return next;
+}
+
+export function loadBook(): ExpressionBook {
+  return loadBookFrom(BOOK_KEY);
+}
+
+export function saveBook(book: ExpressionBook): void {
+  saveBookTo(BOOK_KEY, book);
+}
+
+export function addSession(book: ExpressionBook, session: ExpressionSession): ExpressionBook {
+  return addSessionTo(BOOK_KEY, book, session);
 }
 
 export function todayIso(now: Date = new Date()): string {
