@@ -35,6 +35,7 @@ export const badgeDefinitions: BadgeDefinition[] = [
   { id: 'animal_expert', name: '动物小专家', emoji: '🦁', description: '猜动物通过第 3 关', earned: (s) => (s.bestLevel.guess_animal ?? 0) >= 3 },
   { id: 'chain_master', name: '接龙小能手', emoji: '🔗', description: '词语接龙通过第 3 关', earned: (s) => (s.bestLevel.word_chain ?? 0) >= 3 },
   { id: 'storyteller', name: '故事大王', emoji: '📖', description: '故事接龙通过第 3 关', earned: (s) => (s.bestLevel.story_chain ?? 0) >= 3 },
+  { id: 'puzzle_eye', name: '拼图眼力', emoji: '🧩', description: '拼图通过第 3 关', earned: (s) => (s.bestLevel.puzzle ?? 0) >= 3 },
 ];
 
 const REWARDS_KEY = 'kid_rewards';

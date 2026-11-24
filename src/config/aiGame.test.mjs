@@ -13,10 +13,10 @@ const moduleUrl = `data:text/javascript;base64,${Buffer.from(compiled.outputText
 const game = await import(moduleUrl);
 
 // ---- 玩法列表：只有合作型玩法 ----
-assert.deepEqual(game.kidGames.map((g) => g.id), ['guess_animal', 'word_chain', 'story_chain']);
+assert.deepEqual(game.kidGames.map((g) => g.id), ['guess_animal', 'word_chain', 'story_chain', 'puzzle']);
 assert.doesNotMatch(source, /谁是卧底|谁是人类|undercover|human_hunt/, 'competitive games are removed');
-assert.deepEqual(game.getGamesForAge('preschool').map((g) => g.id), ['guess_animal', 'story_chain']);
-assert.deepEqual(game.getGamesForAge('school').map((g) => g.id), ['guess_animal', 'word_chain', 'story_chain']);
+assert.deepEqual(game.getGamesForAge('preschool').map((g) => g.id), ['guess_animal', 'story_chain', 'puzzle']);
+assert.deepEqual(game.getGamesForAge('school').map((g) => g.id), ['guess_animal', 'word_chain', 'story_chain', 'puzzle']);
 assert.equal(game.getKidGame('story_chain').hostCompanionId, 'kid-story-fairy');
 
 // ---- 关卡 ----

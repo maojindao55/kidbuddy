@@ -33,6 +33,7 @@ import { isLevelUnlocked } from '@/config/kidRewards';
 import { useKid, type KidCompanion } from './KidContext';
 import { ChatBubble, CompanionAvatar } from './components/ChatBubble';
 import { KidInputBar } from './components/KidInputBar';
+import { PuzzleSession } from './KidPuzzleBoard';
 import { StarRow } from './components/StarRow';
 import { KID_SPEAKER_ID, useKidMessages } from './hooks/useKidMessages';
 import { useReadAloud } from './hooks/useReadAloud';
@@ -298,6 +299,18 @@ export default function KidGamePlay() {
   const host = companions.find((c) => c.member.id === game.hostCompanionId) || companions[0];
   if (!host) {
     return companionsLoading ? <p className="p-8 text-center text-lg text-slate-500">小伙伴正在赶来……</p> : <Navigate to="/" replace />;
+  }
+  // 拼图是动手玩法，不用对话回合制，单独一套盘面
+  if (game.id === 'puzzle') {
+    return (
+      <PuzzleSession
+        key={`${levelDef.id}-${replayKey}`}
+        levelNumber={levelNumber}
+        band={profile.band}
+        host={host}
+        onReplay={() => setReplayKey((k) => k + 1)}
+      />
+    );
   }
   return <GameSession key={`${levelDef.id}-${replayKey}`} level={levelDef} host={host} onReplay={() => setReplayKey((k) => k + 1)} />;
 }

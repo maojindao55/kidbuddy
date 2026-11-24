@@ -173,4 +173,23 @@ assert.match(exprPlay, /redraw-tasks/, '要有「换一批」');
 assert.match(exprPlay, /\$\{scope\}\.rotation/, '轮换记录要存本地，不然每次都是同一批');
 assert.doesNotMatch(exprPlay, /fillTasks\(target\.tasks/, '换教具时只能重填本节抽到的题，不能重填整个题库');
 
+// 拼图：动手玩法，不走对话回合制；判定与星星都在本地
+const puzzleBoard = await read('./KidPuzzleBoard.tsx');
+assert.match(play, /PuzzleSession/, '游戏页遇到拼图要切到盘面组件');
+assert.match(puzzleBoard, /data-testid="puzzle-board"/, '要有盘面');
+assert.match(puzzleBoard, /data-testid="puzzle-tray"/, '要有碎片小筐');
+assert.match(puzzleBoard, /placePuzzlePiece\(/, '放置规则交给 kidPuzzle 的纯函数');
+assert.match(puzzleBoard, /puzzleStars\(/, '星星按放错次数算');
+assert.match(puzzleBoard, /gameId: 'puzzle'/, '成绩要记到拼图这本账');
+assert.match(puzzleBoard, /draggable/, '鼠标要能拖');
+assert.match(puzzleBoard, /onClick=\{\(\) => setSelected/, '触屏要能点一下选中');
+assert.match(puzzleBoard, /puzzle-preview/, '要给「看看整幅画」的提示');
+assert.match(puzzleBoard, /puzzle-reshuffle/, '要能重新打乱');
+// 拼图不许把答案直接标在碎片上（比如画序号），否则就失去意义了
+assert.doesNotMatch(puzzleBoard, /\{pieceId \+ 1\}<\/span>/, '碎片上不能印编号');
+const puzzleConfig = await read('../../config/kidPuzzle.ts');
+assert.match(puzzleConfig, /PRESCHOOL_MAX_PIECES/, '小龄要限制块数');
+assert.match(puzzleConfig, /backgroundColor|pieceBackground/, '切块靠 background-position');
+assert.doesNotMatch(puzzleConfig, /from '.*\.(png|jpg|webp)'/, '画面必须是本地 SVG，不引外部图片');
+
 console.log('kidUi.test.mjs: ok');
