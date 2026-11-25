@@ -5,7 +5,7 @@
  */
 
 export type AgeBand = 'preschool' | 'school';
-export type KidGameId = 'guess_animal' | 'word_chain' | 'story_chain';
+export type KidGameId = 'guess_animal' | 'word_chain' | 'story_chain' | 'puzzle';
 export type KidInputMode = 'voice' | 'text';
 
 export interface AgeProfile {
@@ -34,7 +34,7 @@ export const AGE_PROFILES: Record<AgeBand, AgeProfile> = {
     maxRespondersPerTurn: 1,
     autoReadAloud: true,
     defaultInputMode: 'voice',
-    games: ['guess_animal', 'story_chain'],
+    games: ['guess_animal', 'story_chain', 'puzzle'],
     languageGuide: '用幼儿园小朋友能听懂的短句和常见字词，一次只讲一件事，多用拟声词和简单比喻，少用数字和抽象概念。',
   },
   school: {
@@ -45,7 +45,7 @@ export const AGE_PROFILES: Record<AgeBand, AgeProfile> = {
     maxRespondersPerTurn: 2,
     autoReadAloud: false,
     defaultInputMode: 'text',
-    games: ['guess_animal', 'word_chain', 'story_chain'],
+    games: ['guess_animal', 'word_chain', 'story_chain', 'puzzle'],
     languageGuide: '用小学生熟悉的词语，可以解释简单的原因和步骤，遇到生词顺便用一句话解释。',
   },
 };

@@ -47,6 +47,15 @@ export const kidGames: KidGameDefinition[] = [
     hostCompanionId: 'kid-story-fairy',
     ageBands: ['preschool', 'school'],
   },
+  {
+    id: 'puzzle',
+    name: '拼图乐园',
+    emoji: '🧩',
+    description: '把散开的小图块放回原位，拼出完整的一幅画。',
+    howToPlay: ['先看看整幅画长什么样', '点一块碎片，再点它该去的位置', '放错会自动弹回小筐，不扣分', '全部放对就拼好啦'],
+    hostCompanionId: 'kid-drawing-bunny',
+    ageBands: ['preschool', 'school'],
+  },
 ];
 
 export function getKidGame(id: KidGameId): KidGameDefinition {
@@ -66,7 +75,7 @@ export interface KidGameLevel {
   title: string;
   /** 1（最简单）到 5 */
   difficulty: number;
-  /** 猜动物：最多可用提示数；接龙/故事：需要完成的轮数 */
+  /** 猜动物：最多可用提示数；接龙/故事：需要完成的轮数；拼图不用这个字段（恒为 0） */
   targetRounds: number;
   /** 故事接龙的主题 */
   theme?: string;
@@ -78,6 +87,8 @@ const levelTitles: Record<KidGameId, string[]> = {
   guess_animal: ['农场好朋友', '森林小动物', '海洋世界', '草原探险', '极地旅行', '雨林秘境', '夜晚精灵', '昆虫王国', '动物大师'],
   word_chain: ['热身接龙', '小小接龙', '接龙火车', '接龙长队', '接龙高手', '接龙小能手', '接龙达人', '接龙冠军', '接龙大师'],
   story_chain: ['小兔找朋友', '会飞的雨伞', '月亮上的野餐', '迷路的小星星', '海底音乐会', '魔法种子', '雪人去旅行', '恐龙生日会', '彩虹桥冒险'],
+  // 拼图每关一种画面，名字与 kidPuzzle 里的 scene.name 必须一致（有测试卡着）
+  puzzle: ['太阳小山', '小房子', '大树小鸟', '大海帆船', '彩虹云朵', '小汽车', '花朵花园', '月亮夜空', '生日蛋糕'],
 };
 
 export const storyThemes = levelTitles.story_chain;
@@ -96,6 +107,9 @@ export function generateKidGameLevel(gameId: KidGameId, levelNumber: number, ban
     targetRounds = Math.max(preschool ? 3 : 2, (preschool ? 5 : 4) - Math.floor((level - 1) / 3));
   } else if (gameId === 'word_chain') {
     targetRounds = (preschool ? 2 : 3) + Math.floor((level - 1) / 2);
+  } else if (gameId === 'puzzle') {
+    // 拼图没有“轮数”：盘面由 kidPuzzle.puzzleLevelFor 决定，星星按放错次数算
+    targetRounds = 0;
   } else {
     targetRounds = (preschool ? 2 : 3) + Math.floor((level - 1) / 3);
   }
@@ -128,6 +142,7 @@ export function starsForResult(
     if (hints <= 2) return 2;
     return 1;
   }
+  if (level.gameId === 'puzzle') return result.success ? 3 : 0;
   const rounds = Math.max(0, result.roundsCompleted ?? 0);
   if (result.success || rounds >= level.targetRounds) return 3;
   if (rounds >= Math.ceil(level.targetRounds / 2)) return 2;
@@ -261,6 +276,12 @@ export function buildGameHostPrompt(level: KidGameLevel, state: GameHostState = 
       state.usedWords?.length ? `这些词已经用过，不能再用：${state.usedWords.join('、')}。` : '',
       '回复格式：先用一句话夸夸小朋友，再说出你的词，并把你的词放在「」里，例如：真厉害！我接「果汁」。',
     ].filter(Boolean).join('\n');
+  }
+  if (level.gameId === 'puzzle') {
+    return [
+      `你在陪小朋友玩拼图「${level.title}」，一共 ${state.round ?? 0} 块。`,
+      '拼图由孩子自己动手完成，你只负责在旁边鼓励、提醒他先看颜色和形状，不要直接告诉他哪块放哪里。',
+    ].join('\n');
   }
   return [
     `你在和小朋友玩「故事接龙」，主题是「${level.theme ?? '温暖的冒险'}」，现在是第 ${round} 轮，一共 ${level.targetRounds} 轮。`,
