@@ -22,6 +22,19 @@ jobs:
     if: ${{ github.event_name == 'push' || inputs.tag != '' }}
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Create release notes
+        run: node scripts/release-notes.mjs --version "${{ env.RELEASE_TAG }}" --output .release-notes.md
+
       - name: Create draft release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -29,16 +42,6 @@ jobs:
         run: |
           set -euo pipefail
           tag="${{ env.RELEASE_TAG }}"
-          cat > .release-notes.md <<EOF
-          ## 下载安装包
-
-          | 平台 | 文件 | 说明 |
-          |------|------|------|
-          | 🤖 Android 平板 | \`KidBuddy_Android-arm64-${tag}.apk\` | Android 7.0+ (ARM64)，支持华为 / 小米 / 三星 / 联想等平板 |
-
-          ## Android 安装提示
-          首次安装如系统拦截未知来源应用，在设置中允许安装即可；同密钥发布的后续版本可直接覆盖升级，不会丢失本地课堂与儿童记录。
-          EOF
           if ! gh release view "$tag" --repo "${{ github.repository }}" >/dev/null 2>&1; then
             gh release create "$tag" \
               --repo "${{ github.repository }}" \
